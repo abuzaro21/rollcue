@@ -1,0 +1,13 @@
+node_modules/
+.scratch/
+public/
+test-results/
+playwright-report/
+film/out/
+film/capture/
+film/tts/
+*.log
+.env
+.env.*
+data/
+docs/reviews/raw/

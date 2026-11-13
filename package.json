@@ -1,0 +1,43 @@
+{
+  "name": "rollcue",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RollCue: an AI-native print intake surface that reads a customer's file, infers the job, prepares the next production decision and waits for the operator's approval.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.13.0 <25"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/main.ts",
+    "dev:ui": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"test/**/*.test.ts\"",
+    "dataset": "node --disable-warning=ExperimentalWarning scripts/build-dataset.ts",
+    "train": "node --disable-warning=ExperimentalWarning scripts/train.ts",
+    "eval": "node --disable-warning=ExperimentalWarning scripts/eval.ts",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.16",
+    "@napi-rs/canvas": "1.1.1",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.5.438",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@fontsource-variable/inter": "5.3.0",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.4"
+  }
+}

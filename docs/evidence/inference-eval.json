@@ -1,0 +1,590 @@
+{
+ "model": "rc-intent-8c9b8fb884",
+ "temperature": 0.7,
+ "abstain": {
+  "minProb": 0.35,
+  "minMargin": 0.4
+ },
+ "bands": {
+  "confident": 0.9,
+  "likely": 0.35
+ },
+ "generatedAt": "2026-11-13",
+ "syntheticTest": {
+  "n": 626,
+  "top1": 0.941,
+  "top2": 0.982,
+  "macroF1": 0.931,
+  "brier": 0.088,
+  "ece": 0.017,
+  "abstainRate": 0.051,
+  "acceptedAccuracy": 0.963,
+  "wrongAccepted": 22,
+  "wrongConfident": 8,
+  "confusion": {
+   "sticker": {
+    "sticker": 77,
+    "label": 3,
+    "poster": 2,
+    "banner": 0
+   },
+   "label": {
+    "sticker": 9,
+    "label": 129,
+    "poster": 1,
+    "banner": 0
+   },
+   "poster": {
+    "sticker": 3,
+    "label": 6,
+    "poster": 165,
+    "banner": 0
+   },
+   "banner": {
+    "sticker": 3,
+    "label": 2,
+    "poster": 8,
+    "banner": 218
+   }
+  },
+  "reliability": [
+   {
+    "bin": "0-0.1",
+    "n": 0,
+    "meanConf": null,
+    "accuracy": null
+   },
+   {
+    "bin": "0.1-0.2",
+    "n": 0,
+    "meanConf": null,
+    "accuracy": null
+   },
+   {
+    "bin": "0.2-0.3",
+    "n": 0,
+    "meanConf": null,
+    "accuracy": null
+   },
+   {
+    "bin": "0.3-0.4",
+    "n": 0,
+    "meanConf": null,
+    "accuracy": null
+   },
+   {
+    "bin": "0.4-0.5",
+    "n": 2,
+    "meanConf": 0.46,
+    "accuracy": 0.5
+   },
+   {
+    "bin": "0.5-0.6",
+    "n": 15,
+    "meanConf": 0.539,
+    "accuracy": 0.533
+   },
+   {
+    "bin": "0.6-0.7",
+    "n": 17,
+    "meanConf": 0.648,
+    "accuracy": 0.471
+   },
+   {
+    "bin": "0.7-0.8",
+    "n": 24,
+    "meanConf": 0.741,
+    "accuracy": 0.667
+   },
+   {
+    "bin": "0.8-0.9",
+    "n": 17,
+    "meanConf": 0.866,
+    "accuracy": 0.765
+   },
+   {
+    "bin": "0.9-1",
+    "n": 551,
+    "meanConf": 0.992,
+    "accuracy": 0.985
+   }
+  ]
+ },
+ "evidenceGate": {
+  "syntheticTest": {
+   "flaggedRate": 0.152,
+   "confident": 551,
+   "wrongConfident": 8,
+   "wrongConfidentFlagged": 4,
+   "rightConfident": 543,
+   "rightConfidentFlagged": 60
+  },
+  "handset": {
+   "flaggedRate": 0.281,
+   "confident": 24,
+   "wrongConfident": 1,
+   "wrongConfidentFlagged": 1,
+   "rightConfident": 23,
+   "rightConfidentFlagged": 3
+  }
+ },
+ "keywordBaseline": 0.681,
+ "ablations": {
+  "noTextFeatures": 0.903,
+  "noFilename": 0.922,
+  "noNotes": 0.917
+ },
+ "slices": {
+  "misleadingFilename": {
+   "n": 107,
+   "top1": 0.85
+  },
+  "conflictingNotes": {
+   "n": 50,
+   "top1": 0.8
+  },
+  "noSize": {
+   "n": 222,
+   "top1": 0.901
+  },
+  "noDensity": {
+   "n": 125,
+   "top1": 0.904
+  },
+  "opaqueSticker": {
+   "n": 23,
+   "top1": 0.783
+  },
+  "transparentPoster": {
+   "n": 22,
+   "top1": 0.864
+  },
+  "scaledArtwork": {
+   "n": 154,
+   "top1": 0.922
+  },
+  "heldOutShapes": {
+   "n": 510,
+   "top1": 0.931
+  },
+  "heldOutPhrasing": {
+   "n": 169,
+   "top1": 0.982
+  },
+  "arabicNotes": {
+   "n": 67,
+   "top1": 0.955
+  },
+  "noNotes": {
+   "n": 173,
+   "top1": 0.89
+  }
+ },
+ "correction": {
+  "memory": {
+   "tau": 0.08,
+   "beta": 6,
+   "minSimilarity": 0.05
+  },
+  "wrongPredictions": 37,
+  "correctedCaseNowRight": 0.973,
+  "nearVariants": 185,
+  "nearVariantTop1Before": 0.038,
+  "nearVariantTop1After": 0.941,
+  "otherPairs": 23125,
+  "othersTop1Before": 0.942,
+  "othersTop1After": 0.942,
+  "othersTouchedByMemory": 0.001
+ },
+ "handset": {
+  "n": 32,
+  "top1": 0.875,
+  "top2": 1,
+  "macroF1": 0.883,
+  "brier": 0.179,
+  "ece": 0.088,
+  "abstainRate": 0.125,
+  "acceptedAccuracy": 0.929,
+  "wrongAccepted": 2,
+  "wrongConfident": 1,
+  "confusion": {
+   "sticker": {
+    "sticker": 8,
+    "label": 0,
+    "poster": 0,
+    "banner": 0
+   },
+   "label": {
+    "sticker": 2,
+    "label": 6,
+    "poster": 0,
+    "banner": 0
+   },
+   "poster": {
+    "sticker": 1,
+    "label": 1,
+    "poster": 8,
+    "banner": 0
+   },
+   "banner": {
+    "sticker": 0,
+    "label": 0,
+    "poster": 0,
+    "banner": 6
+   }
+  },
+  "reliability": [
+   {
+    "bin": "0-0.1",
+    "n": 0,
+    "meanConf": null,
+    "accuracy": null
+   },
+   {
+    "bin": "0.1-0.2",
+    "n": 0,
+    "meanConf": null,
+    "accuracy": null
+   },
+   {
+    "bin": "0.2-0.3",
+    "n": 0,
+    "meanConf": null,
+    "accuracy": null
+   },
+   {
+    "bin": "0.3-0.4",
+    "n": 0,
+    "meanConf": null,
+    "accuracy": null
+   },
+   {
+    "bin": "0.4-0.5",
+    "n": 1,
+    "meanConf": 0.446,
+    "accuracy": 1
+   },
+   {
+    "bin": "0.5-0.6",
+    "n": 2,
+    "meanConf": 0.53,
+    "accuracy": 0.5
+   },
+   {
+    "bin": "0.6-0.7",
+    "n": 1,
+    "meanConf": 0.62,
+    "accuracy": 0
+   },
+   {
+    "bin": "0.7-0.8",
+    "n": 2,
+    "meanConf": 0.763,
+    "accuracy": 0.5
+   },
+   {
+    "bin": "0.8-0.9",
+    "n": 2,
+    "meanConf": 0.845,
+    "accuracy": 1
+   },
+   {
+    "bin": "0.9-1",
+    "n": 24,
+    "meanConf": 0.989,
+    "accuracy": 0.958
+   }
+  ],
+  "keywordBaseline": 0.531,
+  "cases": [
+   {
+    "id": "coffee-round-sticker",
+    "truth": "sticker",
+    "top": "sticker",
+    "pTop": 0.9994,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "jar-lid-round-label",
+    "truth": "label",
+    "top": "sticker",
+    "pTop": 0.6197,
+    "band": "likely",
+    "abstain": true,
+    "ok": false
+   },
+   {
+    "id": "stickers-final-window",
+    "truth": "poster",
+    "top": "sticker",
+    "pTop": 0.9999,
+    "band": "confident",
+    "abstain": false,
+    "ok": false
+   },
+   {
+    "id": "a4-posters-many",
+    "truth": "poster",
+    "top": "poster",
+    "pTop": 0.9993,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "wall-decal",
+    "truth": "sticker",
+    "top": "sticker",
+    "pTop": 0.9999,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "table-banner",
+    "truth": "banner",
+    "top": "banner",
+    "pTop": 0.9998,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "roll-up",
+    "truth": "banner",
+    "top": "banner",
+    "pTop": 0.9935,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "negated-sticker",
+    "truth": "poster",
+    "top": "poster",
+    "pTop": 0.9879,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "banner-named-label",
+    "truth": "label",
+    "top": "label",
+    "pTop": 0.9995,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "arabic-label",
+    "truth": "label",
+    "top": "label",
+    "pTop": 0.9992,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "arabic-banner-1to10",
+    "truth": "banner",
+    "top": "banner",
+    "pTop": 0.9997,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "no-info-circle",
+    "truth": "sticker",
+    "top": "sticker",
+    "pTop": 0.9793,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "square-sticker",
+    "truth": "sticker",
+    "top": "sticker",
+    "pTop": 0.9924,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "drum-label",
+    "truth": "label",
+    "top": "label",
+    "pTop": 0.9998,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "scaffold-mesh",
+    "truth": "banner",
+    "top": "banner",
+    "pTop": 0.9986,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "cutout-window-poster",
+    "truth": "poster",
+    "top": "poster",
+    "pTop": 0.9325,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "low-res-photo-poster",
+    "truth": "poster",
+    "top": "poster",
+    "pTop": 0.7354,
+    "band": "likely",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "sticker-sheet",
+    "truth": "sticker",
+    "top": "sticker",
+    "pTop": 0.9861,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "typo-poster-for-jars",
+    "truth": "label",
+    "top": "sticker",
+    "pTop": 0.5159,
+    "band": "likely",
+    "abstain": true,
+    "ok": false
+   },
+   {
+    "id": "sticker-with-cut",
+    "truth": "sticker",
+    "top": "sticker",
+    "pTop": 0.9928,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "label-with-cut",
+    "truth": "label",
+    "top": "label",
+    "pTop": 0.9996,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "a2-png-no-density",
+    "truth": "poster",
+    "top": "poster",
+    "pTop": 0.9977,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "banner-named-poster",
+    "truth": "banner",
+    "top": "banner",
+    "pTop": 0.847,
+    "band": "likely",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "tiny-label",
+    "truth": "label",
+    "top": "label",
+    "pTop": 0.9134,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "opaque-badge-sticker",
+    "truth": "sticker",
+    "top": "sticker",
+    "pTop": 0.9977,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "vinyl-wall-print",
+    "truth": "poster",
+    "top": "poster",
+    "pTop": 0.4464,
+    "band": "likely",
+    "abstain": true,
+    "ok": true
+   },
+   {
+    "id": "bare-pdf-poster",
+    "truth": "poster",
+    "top": "poster",
+    "pTop": 0.545,
+    "band": "likely",
+    "abstain": true,
+    "ok": true
+   },
+   {
+    "id": "record-label-party",
+    "truth": "poster",
+    "top": "label",
+    "pTop": 0.7906,
+    "band": "likely",
+    "abstain": false,
+    "ok": false
+   },
+   {
+    "id": "arabic-sticker",
+    "truth": "sticker",
+    "top": "sticker",
+    "pTop": 1,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "eyelets-no-size",
+    "truth": "banner",
+    "top": "banner",
+    "pTop": 0.8424,
+    "band": "likely",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "bottle-neck-label",
+    "truth": "label",
+    "top": "label",
+    "pTop": 0.9748,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   },
+   {
+    "id": "decal-named-poster",
+    "truth": "poster",
+    "top": "poster",
+    "pTop": 0.9955,
+    "band": "confident",
+    "abstain": false,
+    "ok": true
+   }
+  ]
+ }
+}
