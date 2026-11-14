@@ -134,7 +134,7 @@ function inherited(node: PDFDict, key: string): number[] | null {
   for (let n: PDFDict | undefined = node, depth = 0; n && depth < 32; depth++) {
     const b = boxOf(n, key);
     if (b) return b;
-    const parent = n.lookup(PDFName.of('Parent'));
+    const parent: unknown = n.lookup(PDFName.of('Parent'));
     n = parent instanceof PDFDict ? parent : undefined;
   }
   return null;

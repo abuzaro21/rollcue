@@ -143,7 +143,7 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
     else if (rectangular && m.whiteBorder < 0.9) { cut = 'rect'; add('cut', 'Cut path', 'warn', 'No cut path. The artwork is a filled rectangle, so a rectangular cut at the trim is exact.'); }
     else if (params.rectCut) { cut = 'rect'; add('cut', 'Cut path', 'warn', 'No cut path. Operator accepted a rectangular cut at the trim.'); }
     else add('cut', 'Cut path', 'fail', m.whiteBorder >= 0.9 ? 'No cut path, and the artwork sits on an opaque white background, so its outline cannot be separated reliably.' : 'No cut path, and the artwork has no transparency to trace a shape from.');
-  } else if (ins.cut) add('cut', 'Cut path', 'warn', `The file contains a "${ins.cut.name}" separation, but a ${INTENT_LABEL[intent].toLowerCase()} is not cut to shape. It will be left out of the print.`);
+  } else if (ins.cut) add('cut', 'Cut path', 'fail', `The file contains a "${ins.cut.name}" separation, but a ${INTENT_LABEL[intent].toLowerCase()} is not cut to shape. RollCue does not edit customer artwork, and a stray cut path can print as ink or trigger the cutter.`);
 
   // --- bleed (trimmed products) ---
   if (intent === 'poster' || intent === 'banner') {
@@ -164,7 +164,7 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
     if (first.id === 'cut' && (intent === 'sticker' || intent === 'label') && !ins.cut) options.push({ id: 'rect-cut', label: 'Cut as a rectangle', detail: 'Ignore the shape, cut at the trim', params: { rectCut: true } });
     const asks: Record<string, string> = {
       resolution: `Please send the artwork at ${floor.warn} ppi or more at ${size(target.w, target.h)}, or as vector PDF.`,
-      cut: 'Please send the artwork with a stroked spot colour named exactly "CutContour", or as a PNG with a transparent background.',
+      cut: intent === 'sticker' || intent === 'label' ? 'Please send the artwork with a stroked spot colour named exactly "CutContour", or as a PNG with a transparent background.' : 'Please send the artwork without the cut path; this job is printed and trimmed, not cut to shape.',
       roll: `The longest side that fits our roll is ${layout.usableWidthMm} mm. Please confirm a smaller size or a split design.`,
       rotation: 'Please export the PDF without page rotation.',
     };
@@ -195,7 +195,6 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
   if (fit === 'fit') changes.push('Fit artwork inside the requested size; the uncovered area stays unprinted.');
   if (fit === 'fill') changes.push('Fill the requested size; artwork beyond it is cropped.');
   if (build.cropMarks) changes.push('Add crop marks outside the trim.');
-  if (ins.cut && !isCut) changes.push(`Leave out the "${ins.cut.name}" separation (not used for ${INTENT_LABEL[intent].toLowerCase()}).`);
   const warnings = checks.filter((c) => c.status === 'warn' && !['cut', 'scale', 'aspect'].includes(c.id)).map((c) => c.detail);
   if (params.acceptLowRes) warnings.unshift('Operator accepted printing below the resolution floor.');
 

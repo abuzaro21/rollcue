@@ -144,7 +144,7 @@ function wrap(s: string, max: number): string[] {
 
 export type Check = { id: string; label: string; pass: boolean; detail: string };
 
-export type Expect = { pageW: number; pageH: number; trim: { x: number; y: number; w: number; h: number }; cutLoops: number; notice?: boolean };
+export type Expect = { pageW: number; pageH: number; trim: { x: number; y: number; w: number; h: number }; cutLoops: number; keepsCut?: boolean; notice?: boolean };
 
 /** Independent re-read of the artifact bytes. The UI and the release gate use these results; nothing is assumed. */
 export async function verifyArtifact(bytes: Uint8Array, e: Expect): Promise<{ checks: Check[]; preview: Buffer | null }> {
@@ -164,11 +164,11 @@ export async function verifyArtifact(bytes: Uint8Array, e: Expect): Promise<{ ch
     add('trim', 'Trim box', !!t && near(t.x, e.trim.x) && near(t.y, e.trim.y) && near(t.w, e.trim.w) && near(t.h, e.trim.h),
       t ? `${t.w.toFixed(2)} × ${t.h.toFixed(2)} mm at ${t.x.toFixed(2)}, ${t.y.toFixed(2)}` : 'missing');
   }
-  if (e.cutLoops > 0) {
+  if (e.cutLoops > 0 || e.keepsCut) {
     const c = structure.cut;
     add('cut-name', 'Spot colour named exactly "CutContour"', !!c && c.exactName, c ? `found "${c.name}"` : 'no cut separation');
     add('cut-stroke', 'CutContour is stroked, not filled', !!c && c.stroked && !c.filled, c ? `stroked=${c.stroked} filled=${c.filled}` : 'n/a');
-  } else {
+  } else if (!e.notice) {
     add('no-cut', 'No cut separation (none requested)', !structure.cut, structure.cut ? `unexpected "${structure.cut.name}"` : 'none');
   }
   let preview: Buffer | null = null;

@@ -30,9 +30,11 @@ export function memoryOf(items: Correction[]): Memory {
  * similarity = exp(−mean squared standardised distance ÷ τ). Unrelated jobs are untouched by construction; the frozen
  * model weights never change. τ and β are fixed constants, reported in docs/INTENT-INFERENCE.md.
  */
-export const MEMORY = { tau: 0.08, beta: 6, minSimilarity: 0.05 };
+// nearDuplicate: a job this close to a corrected one takes the operator's answer outright (the bounded boost cannot
+// overturn a very confident model, and repeating a correction the operator already made is the worst kind of wrong).
+export const MEMORY = { tau: 0.08, beta: 6, minSimilarity: 0.05, nearDuplicate: 0.9, override: 40 };
 
-export type MemoryMatch = { jobId: string; filename: string; intent: Intent; similarity: number };
+export type MemoryMatch = { jobId: string; filename: string; intent: Intent; similarity: number; nearDuplicate: boolean };
 
 function memoryBoost(m: ModelFile, z: number[], mem?: Memory): { boost: number[]; matches: MemoryMatch[] } {
   const boost = new Array(m.classes.length).fill(0);
@@ -43,8 +45,8 @@ function memoryBoost(m: ModelFile, z: number[], mem?: Memory): { boost: number[]
     const sim = Math.exp(-msd / MEMORY.tau);
     if (sim < MEMORY.minSimilarity) continue;
     const k = m.classes.indexOf(c.intent);
-    boost[k] = Math.max(boost[k], MEMORY.beta * sim);
-    matches.push({ jobId: c.jobId, filename: c.filename, intent: c.intent, similarity: round(sim) });
+    boost[k] = Math.max(boost[k], sim >= MEMORY.nearDuplicate ? MEMORY.override : MEMORY.beta * sim);
+    matches.push({ jobId: c.jobId, filename: c.filename, intent: c.intent, similarity: round(sim), nearDuplicate: sim >= MEMORY.nearDuplicate });
   }
   return { boost, matches: matches.sort((a, b) => b.similarity - a.similarity).slice(0, 3) };
 }

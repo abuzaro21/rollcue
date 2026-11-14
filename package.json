@@ -17,7 +17,8 @@
     "dataset": "node --disable-warning=ExperimentalWarning scripts/build-dataset.ts",
     "train": "node --disable-warning=ExperimentalWarning scripts/train.ts",
     "eval": "node --disable-warning=ExperimentalWarning scripts/eval.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "samples": "node --disable-warning=ExperimentalWarning scripts/make-samples.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.16",

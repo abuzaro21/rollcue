@@ -6,7 +6,7 @@ import { inspect } from '../src/inspect.ts';
 import { featurize, INTENTS } from '../src/features.ts';
 
 const per = Number(process.argv[2] ?? 320);
-const rows = [];
+const rows: Array<Record<string, unknown> & { split: string }> = [];
 const t0 = performance.now();
 let n = 0;
 for (let i = 0; i < per; i++) {

@@ -9,7 +9,7 @@
   "confident": 0.9,
   "likely": 0.35
  },
- "generatedAt": "2026-11-13",
+ "generatedAt": "2026-11-14",
  "syntheticTest": {
   "n": 626,
   "top1": 0.941,
@@ -184,13 +184,15 @@
   "memory": {
    "tau": 0.08,
    "beta": 6,
-   "minSimilarity": 0.05
+   "minSimilarity": 0.05,
+   "nearDuplicate": 0.9,
+   "override": 40
   },
   "wrongPredictions": 37,
-  "correctedCaseNowRight": 0.973,
+  "correctedCaseNowRight": 1,
   "nearVariants": 185,
   "nearVariantTop1Before": 0.038,
-  "nearVariantTop1After": 0.941,
+  "nearVariantTop1After": 0.968,
   "otherPairs": 23125,
   "othersTop1Before": 0.942,
   "othersTop1After": 0.942,

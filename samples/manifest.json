@@ -1,0 +1,114 @@
+{
+  "note": "Synthetic files from dataset/gen.ts via scripts/make-samples.ts. No customer artwork.",
+  "samples": [
+    {
+      "id": "market-stickers",
+      "seed": true,
+      "title": "Market stall stickers",
+      "story": "Transparent artwork with no cut path. RollCue infers die-cut stickers and has already traced a contour and prepared the production PDF.",
+      "intake": {
+        "filename": "olive-market-sticker.pdf",
+        "qty": 500,
+        "reqW": null,
+        "reqH": null,
+        "media": "vinyl",
+        "notes": "die cut stickers for the market stall"
+      },
+      "file": "market-stickers.pdf",
+      "truth": "sticker"
+    },
+    {
+      "id": "stickers-final",
+      "seed": true,
+      "title": "stickers-final.pdf",
+      "story": "Named like a sticker job, but it is one A4 window poster. RollCue leans sticker on thin evidence; correcting it shows recovery.",
+      "intake": {
+        "filename": "stickers-final.pdf",
+        "qty": 1,
+        "reqW": null,
+        "reqH": null,
+        "media": null,
+        "notes": ""
+      },
+      "file": "stickers-final.pdf",
+      "truth": "poster"
+    },
+    {
+      "id": "honey-labels",
+      "seed": true,
+      "title": "Honey jar labels",
+      "story": "A clean label file that already carries a stroked CutContour. Nothing to fix; RollCue keeps the supplied cut.",
+      "intake": {
+        "filename": "honey-jar-labels.pdf",
+        "qty": 3000,
+        "reqW": null,
+        "reqH": null,
+        "media": "label_stock",
+        "notes": "jar labels, 3000 on a roll"
+      },
+      "file": "honey-labels.pdf",
+      "truth": "label"
+    },
+    {
+      "id": "soft-poster",
+      "seed": true,
+      "title": "Shop window poster (low resolution)",
+      "story": "A 700-pixel JPEG asked for at A2. RollCue prepares a polite return notice instead of a blurry print.",
+      "intake": {
+        "filename": "window-poster.jpg",
+        "qty": 2,
+        "reqW": 420,
+        "reqH": 594,
+        "media": "photo_paper",
+        "notes": "poster for the shop window, A2"
+      },
+      "file": "soft-poster.jpg",
+      "truth": "poster"
+    },
+    {
+      "id": "shop-banner",
+      "title": "Shop banner supplied at 1:10",
+      "story": "Drawn at 300 × 100 mm, ordered at 3 × 1 m with Arabic notes. RollCue scales it and checks the effective resolution.",
+      "intake": {
+        "filename": "shop-sign.pdf",
+        "qty": 1,
+        "reqW": 3000,
+        "reqH": 1000,
+        "media": "pvc_banner",
+        "notes": "يافطة للمحل"
+      },
+      "file": "shop-banner.pdf",
+      "truth": "banner"
+    },
+    {
+      "id": "jam-labels-misnamed",
+      "title": "poster-for-jars.pdf",
+      "story": "The filename says poster; the size, quantity, stock and notes say labels. RollCue weighs the whole job, not the name.",
+      "intake": {
+        "filename": "poster-for-jars.pdf",
+        "qty": 2000,
+        "reqW": null,
+        "reqH": null,
+        "media": "label_stock",
+        "notes": "labels for the jam jars"
+      },
+      "file": "jam-labels-misnamed.pdf",
+      "truth": "label"
+    },
+    {
+      "id": "misnamed-cut",
+      "title": "Cut path with the wrong name",
+      "story": "The die line is named \"Cut Contour\" with a space. The cutter would ignore it, so RollCue returns it rather than guess.",
+      "intake": {
+        "filename": "round-sticker.pdf",
+        "qty": 400,
+        "reqW": null,
+        "reqH": null,
+        "media": "vinyl",
+        "notes": "round stickers, kiss cut"
+      },
+      "file": "misnamed-cut.pdf",
+      "truth": "sticker"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+// One worker thread, one task at a time, hard timeout. A timed-out or crashed worker is terminated and replaced, so a
+// hostile file costs at most one timeout and never blocks the request thread.
+import { Worker } from 'node:worker_threads';
+import type { Task } from './worker.ts';
+
+export class TaskError extends Error {
+  code: string;
+  constructor(code: string, message: string) { super(message); this.code = code; }
+}
+
+export class Pool {
+  #worker: Worker | null = null;
+  #queue: Array<() => void> = [];
+  #busy = false;
+  #seq = 0;
+  timeoutMs: number;
+  constructor(timeoutMs = 25_000) { this.timeoutMs = timeoutMs; }
+
+  #spawn() {
+    this.#worker = new Worker(new URL('./worker.ts', import.meta.url), {
+      resourceLimits: { maxOldGenerationSizeMb: 320, maxYoungGenerationSizeMb: 48 },
+      execArgv: ['--disable-warning=ExperimentalWarning'],
+    });
+    this.#worker.unref();
+    return this.#worker;
+  }
+
+  run<T>(task: Task, transfer: ArrayBuffer[] = []): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const start = () => {
+        this.#busy = true;
+        const w = this.#worker ?? this.#spawn();
+        const id = ++this.#seq;
+        const done = () => {
+          clearTimeout(timer);
+          w.off('message', onMsg); w.off('error', onErr); w.off('exit', onExit);
+          this.#busy = false;
+          this.#queue.shift()?.();
+        };
+        const kill = () => { if (this.#worker === w) this.#worker = null; void w.terminate(); };
+        const onMsg = (m: { id: number; ok: boolean; result: T; error: { code: string; message: string } }) => {
+          if (m.id !== id) return;
+          done();
+          if (m.ok) resolve(m.result); else reject(new TaskError(m.error.code, m.error.message));
+        };
+        const onErr = (e: Error) => { done(); kill(); reject(new TaskError(/memory/i.test(String(e)) ? 'too-large' : 'internal', /memory/i.test(String(e)) ? 'The file needs more memory than this service allows.' : 'Processing failed.')); };
+        const onExit = () => { done(); if (this.#worker === w) this.#worker = null; reject(new TaskError('internal', 'Processing stopped unexpectedly.')); };
+        const timer = setTimeout(() => { done(); kill(); reject(new TaskError('timeout', `Processing took longer than ${this.timeoutMs / 1000} s and was stopped.`)); }, this.timeoutMs);
+        w.on('message', onMsg); w.on('error', onErr); w.on('exit', onExit);
+        w.postMessage({ id, task }, transfer);
+      };
+      if (this.#busy) this.#queue.push(start); else start();
+    });
+  }
+
+  async close() { await this.#worker?.terminate(); this.#worker = null; }
+}
