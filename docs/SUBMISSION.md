@@ -14,7 +14,7 @@ DOO Builders League, challenge **"Beyond the Chatbot"**: what replaces the dashb
 | Tagline | The next decision, not another dashboard. |
 | One-line description | AI-native print intake: RollCue reads each customer file, infers the job, prepares the production fix and waits for one approval. |
 | Repository | https://github.com/abuzaro21/rollcue _(to be created)_ |
-| Live demo | _pending deployment_ |
+| Live demo | <https://rollcue-a7jn.onrender.com> |
 | Film | YouTube (Unlisted) link from the owner. The MP4 and SRT are attached to GitHub release v1.0.0. |
 | Thesis | [THESIS.md](THESIS.md) (under 300 words) |
 | Architecture snapshot | [ARCHITECTURE.md](ARCHITECTURE.md) |
@@ -26,8 +26,8 @@ DOO Builders League, challenge **"Beyond the Chatbot"**: what replaces the dashb
 | Item | Status |
 |---|---|
 | Public repository, MIT licence, history scanned | open |
-| CI green on GitHub Actions, or clean-clone local CI log if Actions is blocked | Actions blocked by account billing (run 43617198726, not started); clean-clone log `docs/evidence/ci-local.log` on `0cbfe48`, ALL STAGES PASSED |
-| Live demo verified against the public URL | open |
+| CI green on GitHub Actions, or clean-clone local CI log if Actions is blocked | GitHub Actions green on `1b7b7b5` ([43619011614](https://github.com/abuzaro21/rollcue/actions/runs/43619011614)); the private-repo runs were blocked by account billing until the repository was made public. Clean-clone log on `0cbfe48` also passes |
+| Live demo verified against the public URL | done 2026-11-14 on `1b7b7b5`: 20 HTTP checks, restart recovery, 10 browser runs ([DEPLOY.md](DEPLOY.md)) |
 | Film: about 90 s, 1920×1080, 30 fps, H.264/AAC, narration, burned-in captions | open |
 | Release v1.0.0 with film MP4 and SRT attached | open |
 | Codex reviews complete; changes after the final review listed below | open |

@@ -8,7 +8,7 @@ Nothing happens until the operator approves. The approval is bound to the exact 
 
 Built for the DOO Builders League challenge "Beyond the Chatbot".
 
-- **Live demo:** _pending deployment, see [docs/DEPLOY.md](docs/DEPLOY.md)_
+- **Live demo:** <https://rollcue-a7jn.onrender.com> (free hosting: the first visit after an idle spell can take up to a minute to wake; verification in [docs/DEPLOY.md](docs/DEPLOY.md))
 - **Film (90 s):** _pending, see [docs/SUBMISSION.md](docs/SUBMISSION.md)_
 - **Thesis (≤300 words):** [docs/THESIS.md](docs/THESIS.md)
 

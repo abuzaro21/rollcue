@@ -8,7 +8,7 @@ Single source of truth for progress. Every PASS links its evidence. A gate is PA
 
 ## Phase
 
-PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local and clean clone) → **REVIEW (in progress)** → DEPLOY → FILM → RELEASE
+PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local, clean clone, GitHub Actions) → REVIEW ✔ (R0–R7b) → DEPLOY ✔ → FILM → RELEASE
 
 ## Gates
 
@@ -24,11 +24,11 @@ PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local and c
 | G8 Wrong-guess recovery | Correct intent, invalidate proposals, continue safely | **PASS** | [WRONG-GUESS-RECOVERY.md](WRONG-GUESS-RECOVERY.md); e2e "wrong guess…" (desktop + mobile); `api.test.ts`; `api-r5.test.ts` and e2e R5-5, R5-7 (Codex R5) |
 | G9 Real artifact | Valid output for the workflow | **PASS** | Production PDFs with `Separation /CutContour`. `verifyArtifact` checks loop count, closure, bounds, bleed box and art presence from what the page paints (Codex R3-10). Ghostscript 10.00 `tiffsep` (in the `node:24.13.0` container) yields a CutContour plate for every artifact that has a cut and none for the others, 7/7, in the clean-clone run on `0cbfe48` ([evidence/ci-local.log](evidence/ci-local.log)); that is a colourant smoke test, not a geometry check. The earlier log was from `c40ae2e`, before R3 (Codex R7-10); local Windows runs record `ghostscript: false` because Ghostscript is not installed there. |
 | G10 Legacy comparison | Same task, genuine UI states | **PASS** | [LEGACY-COMPARISON.md](LEGACY-COMPARISON.md), [evidence/comparison.json](evidence/comparison.json), [evidence/comparison.png](evidence/comparison.png). Legacy output is gated on ticket, preflight and cut (Codex R1-3), tested in e2e |
-| G11 Security | Uploads, sessions, artifact access protected | **PASS** | [SECURITY.md](SECURITY.md); `api.test.ts` isolation, CSRF, bad input; `preflight.test.ts` no process/network; `api-r6.test.ts` (Codex R6: sessions, admission, storage, decompression, image budget, hooks, worker, retention); live checks pending deployment |
-| G12 Durability | Refresh and restart preserve state | **PASS (local)**; live restart open | `durability.test.ts`; e2e "refresh keeps the work…" |
+| G11 Security | Uploads, sessions, artifact access protected | **PASS** | [SECURITY.md](SECURITY.md); `api.test.ts` isolation, CSRF, bad input; `preflight.test.ts` no process/network; `api-r6.test.ts` (Codex R6: sessions, admission, storage, decompression, image budget, hooks, worker, retention); live isolation, rate-limit, header and secret checks in [DEPLOY.md](DEPLOY.md) |
+| G12 Durability | Refresh and restart preserve state | **PASS** | `durability.test.ts`; e2e "refresh keeps the work…" (also run live); live: a prepared proposal survived a full redeploy and was approved afterwards ([DEPLOY.md](DEPLOY.md)) |
 | G13 Browser quality | Desktop and mobile pass | **PASS** | Playwright 40/40 (desktop 1440×900 + Pixel 7), [evidence/e2e-local.log](evidence/e2e-local.log), re-run after the R7 fixes; legacy return notice shown before approval (Codex R7-8); preview-gated approval and post-409 recovery tested (Codex R4-5, R4-8); R1 UX fixes (job-switch race, connection states, mobile approve order) are tested |
-| G14 Clean clone | Build, tests, audit, Docker | **PASS** (local Docker; GitHub Actions blocked by account billing, see CI) | `0cbfe48`: typecheck, 87/87 unit, eval, 7/7 artifacts with Ghostscript, 40/40 browser, audit 0 vulnerabilities, Docker build and smoke, "ALL STAGES PASSED" in [evidence/ci-local.log](evidence/ci-local.log) |
-| G15 Live demo | Core workflows on the public URL | OPEN | Needs an isolated free workspace from the owner ([DEPLOY.md](DEPLOY.md)) |
+| G14 Clean clone | Build, tests, audit, Docker | **PASS** (local Docker and GitHub Actions) | `0cbfe48`: typecheck, 87/87 unit, eval, 7/7 artifacts with Ghostscript, 40/40 browser, audit 0 vulnerabilities, Docker build and smoke, "ALL STAGES PASSED" in [evidence/ci-local.log](evidence/ci-local.log) |
+| G15 Live demo | Core workflows on the public URL | **PASS** | <https://rollcue-a7jn.onrender.com>, isolated free `RollCue` workspace, commit `1b7b7b5`. `scripts/live-check.ts`: 20/20 checks (HTTPS, samples, inference, proactive preparation, ambiguous intent, correction, approval, valid artifact, isolation, rate limit, no secrets) and restart recovery; Playwright against the URL: 7 desktop + 3 mobile runs passed ([DEPLOY.md](DEPLOY.md)). Free database expires 2026-12-14 and must be replaced before release |
 | G16 Film | ~90 s, rendered and checked | OPEN | |
 | G17 Submission | Docs and submission content complete | OPEN | [SUBMISSION.md](SUBMISSION.md) |
 
@@ -69,14 +69,12 @@ PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local and c
 
 ## CI
 
-- GitHub Actions workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `scripts/ci.sh`. Status: **blocked, not green.** The first run ([43617198726](https://github.com/abuzaro21/rollcue/actions/runs/43617198726), push of `e5ad538`, 2026-11-14) was not started: GitHub reported "recent account payments have failed or your spending limit needs to be increased". No paid runner or billing change will be made; clean-clone local CI stands in for it.
+- GitHub Actions workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `scripts/ci.sh` with Ghostscript installed. Status: **green** on `1b7b7b5` ([43619011614](https://github.com/abuzaro21/rollcue/actions/runs/43619011614)): unit tests, eval, 7/7 artifacts with Ghostscript plates, 40/40 browser runs, audit 0 vulnerabilities, Docker build and smoke. While the repository was private, GitHub refused to start runs ("recent account payments have failed or your spending limit needs to be increased"); since it was made public on 2026-11-14, runs start and pass.
 - Clean-clone local CI: `scripts/ci-local.sh` clones the committed HEAD into a fresh `node:24.13.0` Linux container with Ghostscript, runs `scripts/ci.sh`, then builds and smoke-tests the Docker image on the host.
 
 ## Owner actions
 
 | Action | Why |
 |---|---|
-| Create an empty, free Render workspace named `RollCue` | Isolated hosting; the MCP cannot create workspaces, and existing workspaces belong to other projects |
-| Approve making `abuzaro21/rollcue` public | Repository visibility is an account-level action |
 | Watch the film; upload it to YouTube as Unlisted | Owner's account |
 | Submit the DOO form | Owner's account; only the form's confirmation completes the submission |
