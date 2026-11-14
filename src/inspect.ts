@@ -348,7 +348,15 @@ export async function renderRaster(bytes: Uint8Array, meta: RasterMeta, physW: n
 
 // ---------- entry point ----------
 
+/** Any parser failure on untrusted bytes becomes a clean refusal, never an internal error. */
 export async function inspect(bytes: Uint8Array): Promise<{ inspection: Inspection; render: Rendered }> {
+  try { return await inspectUnchecked(bytes); } catch (e) {
+    if (e instanceof Rejected) throw e;
+    throw new Rejected('malformed', 'The file is damaged or not a valid PDF, PNG or JPEG.');
+  }
+}
+
+async function inspectUnchecked(bytes: Uint8Array): Promise<{ inspection: Inspection; render: Rendered }> {
   if (bytes.length === 0) throw new Rejected('empty', 'The file is empty.');
   if (bytes.length > MAX_BYTES) throw new Rejected('too-large', `The file is larger than ${MAX_BYTES / 1024 / 1024} MB.`);
   const kind = sniff(bytes);

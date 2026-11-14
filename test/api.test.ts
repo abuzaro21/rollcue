@@ -165,6 +165,37 @@ test('bad input is refused before any parsing work', async () => {
   assert.equal(params.status, 400);
 });
 
+test('duplicate submission: the same file twice is two jobs; double-clicked approval releases once', async () => {
+  const a = await op.post('/api/samples/market-stickers');
+  const b = await op.post('/api/samples/market-stickers');
+  assert.notEqual(a.body.id, b.body.id);
+  await app.service.idle();
+  const v = (await op.get(`/api/jobs/${a.body.id}`)).body;
+  const body = { proposalId: v.proposal.id, artifactSha256: v.proposal.artifact_sha256 };
+  const [r1, r2] = await Promise.all([op.post(`/api/jobs/${v.id}/approve`, body), op.post(`/api/jobs/${v.id}/approve`, body)]);
+  assert.deepEqual([r1.status, r2.status], [200, 200]);
+  const after = (await op.get(`/api/jobs/${v.id}`)).body;
+  assert.equal(after.status, 'released');
+  assert.equal(after.events.filter((e: any) => e.type === 'released').length, 1);
+  assert.equal(after.events.filter((e: any) => e.type === 'approved').length, 1);
+});
+
+test('approval after the job changed is refused (intake edited under a prepared proposal)', async () => {
+  const id = (await op.post('/api/samples/market-stickers')).body.id;
+  await app.service.idle();
+  const v = (await op.get(`/api/jobs/${id}`)).body;
+  const edited = await op.post(`/api/jobs/${id}/intake`, { revision: v.revision, intake: { qty: 5000 } });
+  assert.equal(edited.status, 200);
+  await app.service.idle();
+  const r = await op.post(`/api/jobs/${id}/approve`, { proposalId: v.proposal.id, artifactSha256: v.proposal.artifact_sha256 });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, 'superseded');
+  const now = (await op.get(`/api/jobs/${id}`)).body;
+  assert.equal(now.intake.qty, 5000);
+  assert.notEqual(now.proposal.id, v.proposal.id);
+  assert.ok(now.events.some((e: any) => e.type === 'approval-refused'));
+});
+
 test('a broken PDF fails cleanly inside the worker', async () => {
   const r = await op.post('/api/jobs', new TextEncoder().encode('%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\ntrailer << >>\n%%EOF'), { 'x-filename': 'broken.pdf' });
   assert.equal(r.status, 201);

@@ -329,25 +329,30 @@ export class Service {
    * the stored bytes before anything is called released.
    */
   async approve(sid: string, jid: string, body: { proposalId: unknown; artifactSha256: unknown }) {
+    let refused: { proposal: string; error: HttpError } | null = null;
     const approved = await this.db.tx(async (q) => {
       const job = await this.#lockJob(q, sid, jid);
       const [p] = await q<ProposalRow>('select * from proposals where id = $1 and job_id = $2 for update', [body.proposalId, jid]);
       if (!p) throw new HttpError(404, 'not-found', 'No such proposal for this job.');
-      if (p.status === 'released') return null; // idempotent repeat
-      const refuse = async (status: number, code: string, message: string) => {
-        await this.#event(q, jid, 'approval-refused', { proposal: p.id, code });
-        return new HttpError(status, code, message);
-      };
-      if (p.status === 'superseded' || p.revision !== job.revision) throw await refuse(409, 'superseded', 'This proposal was replaced after the job changed. Review the current one.');
-      if (p.status !== 'prepared') throw await refuse(409, 'not-ready', p.status === 'failed' ? 'This proposal failed verification and cannot be approved.' : 'This proposal is not ready yet.');
-      if (body.artifactSha256 !== p.artifact_sha256) throw await refuse(409, 'artifact-mismatch', 'The approval does not match the prepared artifact.');
-      if (p.policy_version !== POLICY_VERSION || p.model_version !== this.model.version) throw await refuse(409, 'policy-changed', 'Policy or model changed since this was prepared.');
-      if (!p.artifact || sha(p.artifact) !== p.artifact_sha256 || bindingHash(job, p) !== p.binding_hash) throw await refuse(409, 'binding-mismatch', 'Stored artifact does not match its binding.');
+      // Idempotent: a repeat (double click, retry after a dropped response) never executes twice.
+      if (p.status === 'released' || p.status === 'approved') return null;
+      const refuse = (status: number, code: string, message: string) => { refused = { proposal: p.id, error: new HttpError(status, code, message) }; return null; };
+      if (p.status === 'superseded' || p.revision !== job.revision) return refuse(409, 'superseded', 'This proposal was replaced after the job changed. Review the current one.');
+      if (p.status !== 'prepared') return refuse(409, 'not-ready', p.status === 'failed' ? 'This proposal failed verification and cannot be approved.' : 'This proposal is not ready yet.');
+      if (body.artifactSha256 !== p.artifact_sha256) return refuse(409, 'artifact-mismatch', 'The approval does not match the prepared artifact.');
+      if (p.policy_version !== POLICY_VERSION || p.model_version !== this.model.version) return refuse(409, 'policy-changed', 'Policy or model changed since this was prepared.');
+      if (!p.artifact || sha(p.artifact) !== p.artifact_sha256 || bindingHash(job, p) !== p.binding_hash) return refuse(409, 'binding-mismatch', 'Stored artifact does not match its binding.');
       const by = 'operator:' + sha(sid).slice(0, 8);
       await q(`update proposals set status = 'approved', approved_at = now(), approved_by = $2 where id = $1`, [p.id, by]);
       await this.#event(q, jid, 'approved', { proposal: p.id, artifactSha256: p.artifact_sha256, bindingHash: p.binding_hash, by });
       return p;
     });
+    if (refused) {
+      const r = refused as { proposal: string; error: HttpError };
+      // Recorded in its own transaction so the refusal is part of the audit trail.
+      await this.db.tx((q) => this.#event(q, jid, 'approval-refused', { proposal: r.proposal, code: r.error.code }));
+      throw r.error;
+    }
     if (approved) await this.#execute(jid, approved);
     return this.view(sid, jid);
   }
@@ -465,7 +470,10 @@ export class Service {
   /** Restart recovery: re-run analysis for jobs interrupted mid-analysis, and re-prepare proposals interrupted mid-build. */
   async recover() {
     const analysing = await this.db.q<{ id: string }>(`select id from jobs where status = 'analysing'`);
-    for (const j of analysing) this.#bg(this.#analyse(j.id));
+    for (const j of analysing) {
+      await this.db.tx((q) => this.#supersede(q, j.id, 'restart-recovery')); // nothing prepared before the crash stays approvable
+      this.#bg(this.#analyse(j.id));
+    }
     const preparing = await this.db.q<{ job_id: string }>(`select distinct job_id from proposals where status in ('preparing','approved')`);
     for (const p of preparing) this.#bg(this.#replan(p.job_id, { reason: 'restart-recovery', bump: true }));
     return { analysing: analysing.length, preparing: preparing.length };
