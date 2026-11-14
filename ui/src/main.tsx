@@ -44,13 +44,16 @@ function App() {
       try {
         const v = await api.job(current);
         if (stop || v.id !== curRef.current) return;
-        setJob(v);
+        // Never step back to an older revision than the one on screen.
+        setJob((cur) => (cur && cur.id === v.id && cur.revision > v.revision ? cur : v));
+        // While idle, keep watching: another tab may correct this job or change session memory (Codex R5-7).
         if (isWorking(v)) t = setTimeout(tick, 600);
+        else { t = setTimeout(tick, 5000); void refreshSession().catch(() => undefined); }
       } catch { if (!stop) t = setTimeout(tick, 2000); }
     };
     void tick();
     return () => { stop = true; clearTimeout(t); };
-  }, [current, kick]);
+  }, [current, kick, refreshSession]);
   const anyWorking = jobs.some((j) => j.status === 'analysing') || isWorking(shown);
   useEffect(() => {
     if (!anyWorking) return;
@@ -94,6 +97,7 @@ function App() {
       return v;
     }),
     retry: () => run(() => api.retry(job_)),
+    intake: (patch, note) => run(() => api.intake(job_, patch), note),
     reject: () => run(() => api.reject(job_), 'Job rejected. Nothing was prepared for production.'),
     next: nextOpen ? () => { counter.screen(); setCurrent(nextOpen.id); } : null,
   };

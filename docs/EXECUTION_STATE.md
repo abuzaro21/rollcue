@@ -21,12 +21,12 @@ PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local and c
 | G5 Intent inference | Real engine, varied inputs, held-out evaluation | **PASS** | [INFERENCE-EVALUATION.md](INFERENCE-EVALUATION.md), [evidence/inference-eval.json](evidence/inference-eval.json); CI fails if results drift. Codex R2 reproduced every figure and confirmed no label leakage; test-set overlap with training is now reported ([reviews/R2-inference-eval.md](reviews/R2-inference-eval.md)) |
 | G6 Proactive action | Useful action initiated automatically | **PASS** | Seeded and uploaded jobs are prepared and verified before the operator opens them (`api.test.ts` "first visit seeds jobs that RollCue has already prepared") |
 | G7 Human review | Approval gates consequential changes | **PASS** | [ACTION-SAFETY.md](ACTION-SAFETY.md); `api.test.ts` binding, idempotency, superseded, policy-changed, binding-mismatch; `api-r4.test.ts` exact-view binding, overlapping edits, closed jobs, stranded releases (Codex R4) |
-| G8 Wrong-guess recovery | Correct intent, invalidate proposals, continue safely | **PASS** | [WRONG-GUESS-RECOVERY.md](WRONG-GUESS-RECOVERY.md); e2e "wrong guess…" (desktop + mobile); `api.test.ts` |
+| G8 Wrong-guess recovery | Correct intent, invalidate proposals, continue safely | **PASS** | [WRONG-GUESS-RECOVERY.md](WRONG-GUESS-RECOVERY.md); e2e "wrong guess…" (desktop + mobile); `api.test.ts`; `api-r5.test.ts` and e2e R5-5, R5-7 (Codex R5) |
 | G9 Real artifact | Valid output for the workflow | **PASS** | Production PDFs with `Separation /CutContour`. `verifyArtifact` checks loop count, closure, bounds, bleed box and art presence from what the page paints (Codex R3-10). Ghostscript 10.00 `tiffsep` yields a CutContour plate for every artifact that has a cut, 7/7 ([evidence/ci-local.log](evidence/ci-local.log)); that is a colourant smoke test, not a geometry check. The CI log predates R3 and is regenerated on the final commit. |
 | G10 Legacy comparison | Same task, genuine UI states | **PASS** | [LEGACY-COMPARISON.md](LEGACY-COMPARISON.md), [evidence/comparison.json](evidence/comparison.json), [evidence/comparison.png](evidence/comparison.png). Legacy output is gated on ticket, preflight and cut (Codex R1-3), tested in e2e |
 | G11 Security | Uploads, sessions, artifact access protected | **PASS (pending Codex R6)** | [SECURITY.md](SECURITY.md); `api.test.ts` isolation, CSRF, bad input; `preflight.test.ts` no process/network |
 | G12 Durability | Refresh and restart preserve state | **PASS (local)**; live restart open | `durability.test.ts`; e2e "refresh keeps the work…" |
-| G13 Browser quality | Desktop and mobile pass | **PASS** | Playwright 34/34 (desktop 1440×900 + Pixel 7), [evidence/e2e-local.log](evidence/e2e-local.log), re-run after the R4 fixes; preview-gated approval and post-409 recovery tested (Codex R4-5, R4-8); R1 UX fixes (job-switch race, connection states, mobile approve order) are tested |
+| G13 Browser quality | Desktop and mobile pass | **PASS** | Playwright 38/38 (desktop 1440×900 + Pixel 7), [evidence/e2e-local.log](evidence/e2e-local.log), re-run after the R5 fixes; preview-gated approval and post-409 recovery tested (Codex R4-5, R4-8); R1 UX fixes (job-switch race, connection states, mobile approve order) are tested |
 | G14 Clean clone | Build, tests, audit, Docker | _see below_ | [evidence/ci-local.log](evidence/ci-local.log) |
 | G15 Live demo | Core workflows on the public URL | OPEN | Needs an isolated free workspace from the owner ([DEPLOY.md](DEPLOY.md)) |
 | G16 Film | ~90 s, rendered and checked | OPEN | |
@@ -45,7 +45,7 @@ PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local and c
 | Missing bleed | `preflight.test.ts` "missing bleed is a warning…" |
 | Wrong cut path | `preflight.test.ts` "wrong cut paths are returned…" |
 | Duplicate submission | `api.test.ts` "duplicate submission…" |
-| Operator correction after proposal preparation | `api.test.ts` "wrong guess: correction supersedes…", e2e "wrong guess…" |
+| Operator correction after proposal preparation | `api.test.ts` "wrong guess: correction supersedes…", e2e "wrong guess…", `api-r5.test.ts` R5-1, R5-2 |
 | Approval after file changes | `api.test.ts` "approval after the job changed is refused…", "older policy or model version…" |
 | Cross-session artifact access | `api.test.ts` "sessions are isolated" |
 | Execution failure and retry | `api.test.ts` "an execution failure…", e2e "execution failure…", `api-r4.test.ts` R4-3 (failed final write, resume) |
@@ -63,7 +63,7 @@ PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local and c
 | R2 | Inference model and evaluation | done: 10 findings (4 major), all fixed; aspect-ratio feature bug fixed, dataset rebuilt, model retrained, every figure regenerated; fixes not re-reviewed until R7 | [reviews/R2-inference-eval.md](reviews/R2-inference-eval.md) |
 | R3 | Preflight correctness | done: 14 findings (2 blockers, 11 major), all fixed with a regression test each; cut detection now follows executed content, verification counts real loops and checks bounds and art; unsupported inputs refused or returned; fixes not re-reviewed until R7 | [reviews/R3-preflight.md](reviews/R3-preflight.md) |
 | R4 | Approval and execution | done: 8 findings (1 blocker, 2 major), all fixed; the decision shown is stored with and bound to its proposal, one open proposal per job, closed jobs cannot be approved, stranded releases resume, preview must load before approval; regression tests for 7 (R4-4 is a Postgres race fixed by construction); fixes not re-reviewed until R7 | [reviews/R4-approval.md](reviews/R4-approval.md) |
-| R5 | Wrong-guess recovery | open | |
+| R5 | Wrong-guess recovery | done: 8 findings (1 blocker, 6 major), all fixed with tests; approval re-decides the job against current memory and roll, reconciliation invalidates before preparing, type changes drop old choices, one lesson per job, a distinct job's correction asks instead of re-typing, every choice has a way back, idle tabs refresh; `rc-policy-5`; fixes not re-reviewed until R7 | [reviews/R5-recovery.md](reviews/R5-recovery.md) |
 | R6 | Security | open | |
 | R7 | Final release diff | open | |
 

@@ -6,7 +6,7 @@ import type { Inspection } from './inspect.ts';
 import type { Prediction } from './model.ts';
 import { rollLayout, cropMarkGeometry, DEFAULT_ROLL, type Layout, type RollSettings } from './layout.ts';
 
-export const POLICY_VERSION = 'rc-policy-4';
+export const POLICY_VERSION = 'rc-policy-5';
 
 /** Work this shop does not prepare on roll media. The model only knows four intents, so this is a hard boundary in policy, not a guess. */
 // "Packaging labels" and "packaging stickers" are labels and stickers, not packaging manufacture (Codex R2-3).
@@ -25,7 +25,7 @@ export const MAX_BLEED_MM = 5;
 
 export type Params = {
   intent?: Intent; // operator correction; overrides the model
-  targetW?: number; targetH?: number; // operator-chosen finished size, mm
+  targetW?: number | null; targetH?: number | null; // operator-chosen finished size, mm (null in a request clears it)
   fit?: 'fit' | 'fill'; // when the requested aspect differs from the art
   offsetMm?: number; // contour offset outside the art
   radiusMm?: number; // corner radius for a rectangular cut
@@ -82,9 +82,20 @@ export function evidenceOf(p: Prediction, intake: Intake): Evidence {
   return { thin: reasons.length > 0, reasons, filenameShare: Math.round(fileShare * 100) / 100, contextSignals: signals };
 }
 
+/**
+ * A remembered correction that is not a near-duplicate may suggest an intent, but it may not overturn the model's own
+ * reading by itself: one correction must not silently re-type a different job (Codex R5-4).
+ */
+export function memoryOverturns(pred: Prediction): boolean {
+  if (!pred.modelProbs || pred.abstain) return false;
+  const modelTop = (Object.keys(pred.modelProbs) as Intent[]).reduce((a, b) => (pred.modelProbs[b] > pred.modelProbs[a] ? b : a));
+  return pred.top !== modelTop && !pred.memory.some((m) => m.nearDuplicate && m.intent === pred.top);
+}
+
 export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: Params, roll: RollSettings = DEFAULT_ROLL): Plan {
   const evidence = evidenceOf(pred, intake);
-  const intent: Intent | null = params.intent ?? (pred.abstain ? null : pred.top);
+  const overturn = !params.intent && memoryOverturns(pred);
+  const intent: Intent | null = params.intent ?? (pred.abstain || overturn ? null : pred.top);
   const intentSource = params.intent ? 'operator' : intent ? 'model' : null;
   const checks: PCheck[] = [];
   const add = (id: string, label: string, status: CheckStatus, detail: string) => checks.push({ id, label, status, detail });
@@ -110,9 +121,19 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
 
   // --- intent ---
   if (!intent) {
-    const options = pred.ranked.slice(0, 3).map((k, i) => ({
+    // Every supported type, so the operator never has to pass through a wrong answer to reach the right one (Codex R5-8).
+    const options = pred.ranked.map((k, i) => ({
       id: `intent-${k}`, label: INTENT_LABEL[k], detail: pred.forEach[k].map((e) => e.label).slice(0, 2).join(' · ') || 'weak evidence', recommended: i === 0, params: { intent: k },
     }));
+    if (overturn) {
+      const m = pred.memory.find((x) => x.intent === pred.top)!;
+      const own = pred.ranked.find((k) => k !== pred.top && pred.modelProbs[k] === Math.max(...Object.values(pred.modelProbs)))!;
+      add('intent', 'Job type', 'unknown', `The model reads ${INTENT_LABEL[own].toLowerCase()}; your correction of a ${Math.round(m.similarity * 100)}% similar file points to ${INTENT_LABEL[pred.top].toLowerCase()}.`);
+      return {
+        intent: null, intentSource: null, evidence, checks, target: null,
+        decision: { kind: 'intent', headline: 'Which job is this?', found: `RollCue reads it as ${INTENT_LABEL[own].toLowerCase()}, but it resembles ${m.filename}, which you corrected to ${INTENT_LABEL[pred.top].toLowerCase()}.`, why: 'A correction applies by itself only to near-identical files. This one differs enough that you confirm it once.', options },
+      };
+    }
     add('intent', 'Job type', 'unknown', `Model abstained: top ${Math.round(pred.pTop * 100)}%, margin ${Math.round(pred.margin * 100)} points.`);
     return {
       intent: null, intentSource: null, evidence, checks, target: null,
@@ -178,6 +199,7 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
     else if (c && !c.exactName) add('cut', 'Cut path', 'fail', `The cut separation is named "${c.name}", not "CutContour". The cutter would ignore it and the printer may print it as ink.`);
     else if (c && c.filled) add('cut', 'Cut path', 'fail', 'The CutContour separation is used as a fill, not a stroke.');
     // A CutContour that is declared but never stroked (unused, zero tint, empty path) is no cut: trace one as for any file.
+    else if (params.rectCut) { cut = 'rect'; add('cut', 'Cut path', 'warn', 'No cut path. Operator chose a rectangular cut at the trim.'); }
     else if (transparent && !(intent === 'label' && rectangular && m.coverage > 0.97)) { cut = 'contour'; add('cut', 'Cut path', 'warn', `No cut path. A contour can be traced from the artwork's transparency (${m.components} shape${m.components === 1 ? '' : 's'}).`); }
     else if (rectangular && m.whiteBorder < 0.9) { cut = 'rect'; add('cut', 'Cut path', 'warn', 'No cut path. The artwork is a filled rectangle, so a rectangular cut at the trim is exact.'); }
     else if (params.rectCut) { cut = 'rect'; add('cut', 'Cut path', 'warn', 'No cut path. Operator accepted a rectangular cut at the trim.'); }
@@ -254,6 +276,11 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
     : { h: 'Ready for production', f: unresolved.length ? `No blocking issues for ${INTENT_LABEL[intent].toLowerCase()}, but ${unresolved.length === 1 ? 'one check' : `${unresolved.length} checks`} could not be confirmed (listed below).` : `Every check passes for ${INTENT_LABEL[intent].toLowerCase()}.`, w: 'The production file and job ticket are prepared. Approve to release them to the queue.' };
   const options: Option[] = [];
   if (cut === 'contour') for (const o of [1, 2, 3]) if (o !== build.offsetMm) options.push({ id: `offset-${o}`, label: `${o} mm border`, detail: 'Re-trace the contour', params: { offsetMm: o } });
+  // Ways back from every choice made so far (Codex R5-5, R5-6).
+  if (cut === 'contour') options.push({ id: 'cut-rect', label: 'Rectangle at the trim', detail: 'Use instead of the traced contour', params: { rectCut: true } });
+  if (params.rectCut && transparent) options.push({ id: 'cut-contour', label: 'Trace the contour', detail: 'Instead of the rectangle', params: { rectCut: false } });
+  if (params.targetW) options.push({ id: 'size-change', label: 'Change size', detail: `You chose ${size(target.w, target.h)}`, params: { targetW: null, targetH: null } });
+  if (params.acceptLowRes) options.push({ id: 'lowres-undo', label: 'Do not print it soft', detail: 'Return it to the customer instead', params: { acceptLowRes: false } });
   if (fit !== 'scale') options.push({ id: `fit-${fit === 'fit' ? 'fill' : 'fit'}`, label: fit === 'fit' ? 'Fill and crop' : 'Fit inside', detail: 'Change how the art meets the size', params: { fit: fit === 'fit' ? 'fill' : 'fit' } });
   return {
     intent, intentSource, evidence, checks, target,

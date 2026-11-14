@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { INTENTS, INTENT_LABEL, MEDIA_LABEL, type Intent } from '../../src/features.ts';
+import { INTENTS, INTENT_LABEL, MEDIA_LABEL, type Intake, type Intent } from '../../src/features.ts';
 import type { Option, PCheck } from '../../src/policy.ts';
 import { isWorking, type JobView } from './api.ts';
 import { fmt } from './mat.tsx';
@@ -8,6 +8,7 @@ export type Act = {
   decide: (params: Record<string, unknown>, note?: string) => void;
   approve: () => void;
   retry: () => void;
+  intake: (patch: Partial<Intake>, note?: string) => void;
   reject: () => void;
   next: (() => void) | null;
   busy: boolean;
@@ -29,13 +30,22 @@ export function Card({ job, act, notice }: { job: JobView; act: Act; notice: Rea
   return <Decision job={job} act={act} notice={notice} />;
 }
 
-function Meta({ job }: { job: JobView }) {
+function Meta({ job, act }: { job: JobView; act?: Act }) {
   const i = job.intake;
-  const bits = [i.qty ? `${i.qty.toLocaleString('en-US')} pcs` : 'qty not given', i.media ? MEDIA_LABEL[i.media] : 'media not given', i.reqW && i.reqH ? `ordered ${fmt(i.reqW)} × ${fmt(i.reqH)} mm` : null].filter(Boolean);
+  // Media is part of the order, so it can be corrected where the decision is made (Codex R5-5).
+  const media = act ? (
+    <label className="media-pick"><span className="sr-only">Media</span>
+      <select value={i.media ?? ''} disabled={act.busy} onChange={(e) => act.intake({ media: e.target.value as Intake['media'] }, `Media set to ${MEDIA_LABEL[e.target.value as keyof typeof MEDIA_LABEL]}.`)}>
+        {!i.media && <option value="">media not given</option>}
+        {Object.entries(MEDIA_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
+    </label>
+  ) : null;
+  const bits = [i.qty ? `${i.qty.toLocaleString('en-US')} pcs` : 'qty not given', act ? null : i.media ? MEDIA_LABEL[i.media] : 'media not given', i.reqW && i.reqH ? `ordered ${fmt(i.reqW)} × ${fmt(i.reqH)} mm` : null].filter(Boolean);
   return (
     <header className="card-meta">
       <span className="file" title={job.filename}>{job.filename}{job.sample && <span className="chip sample-tag">sample job</span>}</span>
-      <span className="muted">{bits.join(' · ')}</span>
+      <span className="muted">{bits.join(' · ')}{media && <> · {media}</>}</span>
       {i.notes && <q className="notes" dir="auto">{i.notes}</q>}
     </header>
   );
@@ -151,7 +161,7 @@ function Decision({ job, act, notice }: { job: JobView; act: Act; notice: ReactN
   const choose = d.kind === 'intent' || d.kind === 'size';
   return (
     <section className="card" aria-live="polite">
-      <Meta job={job} />
+      <Meta job={job} act={job.status === 'ready' ? act : undefined} />
       {d.kind !== 'intent' && <IntentLine job={job} open={alt} setOpen={setAlt} />}
       {alt && <NotThis job={job} act={act} close={() => setAlt(false)} />}
       {notice}

@@ -123,6 +123,8 @@ button.chip { cursor: pointer; padding: 5px 11px; }
 .card-meta { display: grid; gap: 2px; padding-bottom: 14px; border-bottom: 1px solid var(--line-2); }
 .card-meta .file { font-weight: 650; font-size: 14.5px; overflow-wrap: anywhere; }
 .card-meta .muted { font-size: 13px; }
+.media-pick select { font: inherit; color: var(--ink-2); background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; min-height: 24px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .notes { font-size: 13.5px; color: var(--ink-2); margin-top: 4px; quotes: '“' '”'; }
 .intent { display: grid; gap: 8px; }
 .intent-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

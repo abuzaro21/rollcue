@@ -215,7 +215,13 @@
   "otherPairsMatchedByMemory": 31,
   "otherPairsTopChanged": 0,
   "otherPairsHelped": 0,
-  "otherPairsHarmed": 0
+  "otherPairsHarmed": 0,
+  "underPolicy": {
+   "nearVariantsAppliedRight": 0.8,
+   "nearVariantsAsked": 0.164,
+   "otherPairsHarmedApplied": 0,
+   "otherPairsHarmedAsked": 0
+  }
  },
  "handset": {
   "n": 32,

@@ -10,7 +10,7 @@
         "decisions": [
           "approve prepared file"
         ],
-        "ms": 2128
+        "ms": 2196
       },
       "legacy": {
         "clicks": 9,
@@ -23,7 +23,7 @@
           "enter offset 2 mm",
           "approve output"
         ],
-        "ms": 1484
+        "ms": 1649
       }
     },
     "stickers-final": {
@@ -35,7 +35,7 @@
           "correct intent → Poster",
           "approve prepared file"
         ],
-        "ms": 3172
+        "ms": 3175
       },
       "legacy": {
         "clicks": 9,
@@ -47,7 +47,7 @@
           "choose cut method: none",
           "approve output"
         ],
-        "ms": 1398
+        "ms": 1536
       }
     }
   }

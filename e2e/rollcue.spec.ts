@@ -123,7 +123,7 @@ test('upload: a real file through intake, reading and decision', async ({ page }
   await page.getByRole('button', { name: '+ Upload' }).click();
   await page.locator('.drop input[type=file]').setInputFiles('samples/jam-labels-misnamed.pdf');
   await page.getByLabel('Quantity').fill('2000');
-  await page.getByLabel('Media').selectOption('label_stock');
+  await page.locator('.card-meta').getByLabel('Media').selectOption('label_stock');
   await page.getByLabel('Customer notes').fill('labels for the jam jars');
   await page.getByRole('button', { name: 'Let RollCue read it' }).click();
   await ready(page);
@@ -185,7 +185,7 @@ test('a suggested size is a choice, not a setting already applied (Codex R1-4)',
   await page.getByRole('button', { name: '+ Upload' }).click();
   await page.locator('.drop input[type=file]').setInputFiles({ name: 'badge.png', mimeType: 'image/png', buffer: cv.toBuffer('image/png') });
   await page.getByLabel('Quantity').fill('500');
-  await page.getByLabel('Media').selectOption('vinyl');
+  await page.locator('.card-meta').getByLabel('Media').selectOption('vinyl');
   await page.getByLabel('Customer notes').fill('die cut stickers');
   await page.getByRole('button', { name: 'Let RollCue read it' }).click();
   await ready(page);
@@ -235,6 +235,34 @@ test('a stale approval follows the replacement decision without a reload (Codex 
   await expect(page.locator('.toast')).toContainText('replaced');
   await other;
   await expect(page.locator('.eyebrow')).toHaveText('Prepared automatically · waiting for your approval', { timeout: 15_000 });
+  await expect(page.locator('.binding')).not.toHaveText(bound!);
+});
+
+test('another tab’s correction reaches an idle tab without a reload (Codex R5-7)', async ({ page, context }) => {
+  await page.goto('/');
+  await ready(page);
+  await openJob(page, /stickers-final/);
+  const other = await context.newPage();
+  await other.goto('/');
+  await ready(other);
+  await openJob(other, /stickers-final/);
+  await other.getByRole('button', { name: 'Not this?' }).click();
+  await other.locator('.alt', { hasText: 'Banner' }).click();
+  await ready(other);
+  await expect(page.locator('.intent-name')).toHaveText('Banner', { timeout: 15_000 });
+  await expect(page.getByRole('button', { name: /Remembers 1 correction/ })).toBeVisible();
+  await other.close();
+});
+
+test('media can be corrected on the decision card (Codex R5-5)', async ({ page }) => {
+  await page.goto('/');
+  await ready(page);
+  await openJob(page, /olive-market-sticker/);
+  const bound = await page.locator('.binding').textContent();
+  await page.locator('.card-meta').getByLabel('Media').selectOption({ label: 'Paper' });
+  await expect(page.locator('.toast')).toContainText('Media set to Paper');
+  await ready(page);
+  await expect(page.locator('.card-meta').getByLabel('Media')).toHaveValue('paper');
   await expect(page.locator('.binding')).not.toHaveText(bound!);
 });
 

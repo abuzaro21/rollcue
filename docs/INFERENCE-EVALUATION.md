@@ -126,12 +126,14 @@ For each of the 33 wrong predictions in the test set, the evaluation simulates t
 | Other test jobs right, before / after | 94.9% / 94.9% (20,625 correction–job pairs) |
 | Pairs where memory matched the other job at all | 31 |
 | Pairs where memory changed the other job's top intent | 0 |
+| Under policy: near-variants applied right without a question | 80.0% |
+| Under policy: near-variants asked (memory would overturn the model; remembered answer offered first) | 16.4% |
 
 Each pair is one correction against one other job. Corrections are not accumulated across a session here, so this does not measure a session with many corrections.
 
 Near-variants are "the same customer sends a similar job": same intent, shape kind, notes, filename and media; new colours, size ±10%, quantity ×0.5–2 (`dataset/gen.ts` `variantOf`).
 
-When remembered corrections make the reading differ from the model's own, the evidence gate flags the job: "Read as X only because you corrected Y; the model alone reads Z." Similarity in feature space is not proof that two jobs share an intent.
+The last two rows count what the operator sees: policy lets a correction re-type a job by itself only for near-duplicates (similarity ≥ 0.9). Otherwise it asks (Codex R5-4). When remembered corrections make the reading differ from the model's own, the evidence gate flags the job: "Read as X only because you corrected Y; the model alone reads Z." Similarity in feature space is not proof that two jobs share an intent.
 
 ## Reproduce
 

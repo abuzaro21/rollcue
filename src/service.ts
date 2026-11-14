@@ -9,6 +9,10 @@ import { Pool, TaskError } from './pool.ts';
 import { featurize, INTENTS, MEDIA, INTENT_LABEL, type Intake, type Intent } from './features.ts';
 import { predict, memoryOf, type ModelFile, type Prediction } from './model.ts';
 import { plan, POLICY_VERSION, PARAM_LIMITS, type Params, type Plan } from './policy.ts';
+
+// Everything the decision card shows (text, layout, notice, check details) counts; otherwise the operator could approve
+// a view that no longer matches the bound proposal (Codex R4-1).
+const signature = (x: Plan | null) => canon([x?.intent, x?.intentSource, x?.decision, x?.checks]);
 import { sniff, MAX_BYTES } from './inspect.ts';
 import { DEFAULT_ROLL, type RollSettings } from './layout.ts';
 import type { AnalyseResult, PrepareResult, PrepareTask } from './worker.ts';
@@ -55,6 +59,7 @@ export function validateParams(raw: unknown): Params & { intent?: Intent | null 
   const num = (k: string, [lo, hi]: readonly [number, number]) => {
     const v = (raw as Record<string, unknown>)[k];
     if (v === undefined) return;
+    if (v === null && k.startsWith('target')) { out[k] = null; return; } // clears an operator-chosen size
     if (typeof v !== 'number' || !Number.isFinite(v) || v < lo || v > hi) throw new HttpError(400, 'bad-params', `${k} must be between ${lo} and ${hi}.`);
     out[k] = Math.round(v * 10) / 10;
   };
@@ -200,16 +205,32 @@ export class Service {
    * when something outside the job changed, e.g. session memory). Prepared results from an older revision are discarded.
    */
   async #replan(jid: string, o: { reason: string; bump?: boolean; onlyIfChanged?: boolean }) {
-    const prep = await this.db.tx(async (q) => {
+    const prep = await this.#planJob(jid, o);
+    if (prep) await this.#prepare(jid, prep.pid, prep.task);
+  }
+
+  /** What RollCue would decide now, from the stored job, the session's memory and roll, and the operator's choices. */
+  async #freshPlan(q: Q, job: JobRow, params: Params = job.params) {
+    const [{ roll }] = await q<{ roll: RollSettings }>('select roll from sessions where id = $1', [job.session_id]);
+    const { memory } = await this.memory(job.session_id, q);
+    const pred = predict(this.model, job.features!, memory);
+    return { pred, p: plan(job.inspection!, job.intake, pred, params, roll) };
+  }
+
+  /** The planning half of #replan: one transaction, no worker. Returns the preparation to run, if any. */
+  async #planJob(jid: string, o: { reason: string; bump?: boolean; onlyIfChanged?: boolean }) {
+    return this.db.tx(async (q) => {
       const [job] = await q<JobRow>('select * from jobs where id = $1 for update', [jid]);
       if (!job || !job.inspection || !job.features || CLOSED_JOB.includes(job.status)) return null;
-      const [{ roll }] = await q<{ roll: RollSettings }>('select roll from sessions where id = $1', [job.session_id]);
-      const { memory } = await this.memory(job.session_id, q);
-      const pred = predict(this.model, job.features, memory);
-      const p = plan(job.inspection, job.intake, pred, job.params, roll);
-      // Everything the decision card shows (text, layout, notice, check details) counts; otherwise the operator could
-      // approve a view that no longer matches the bound proposal (Codex R4-1).
-      const signature = (x: Plan | null) => canon([x?.intent, x?.intentSource, x?.decision, x?.checks]);
+      let { pred, p } = await this.#freshPlan(q, job);
+      // Choices made for one job type (border, fit, size preset, overrides) do not carry to another (Codex R5-2).
+      const stale = Object.keys(job.params).filter((k) => k !== 'intent');
+      if (job.plan?.intent && p.intent !== job.plan.intent && stale.length) {
+        job.params = job.params.intent ? { intent: job.params.intent } : {};
+        await q('update jobs set params = $2::jsonb where id = $1', [jid, JSON.stringify(job.params)]);
+        await this.#event(q, jid, 'options-reset', { cleared: stale, from: job.plan.intent, to: p.intent });
+        ({ pred, p } = await this.#freshPlan(q, job));
+      }
       if (o.onlyIfChanged && job.plan && signature(job.plan) === signature(p) && job.prediction?.top === pred.top) {
         await q('update jobs set prediction = $2::jsonb, plan = $3::jsonb where id = $1', [jid, JSON.stringify(pred), JSON.stringify(p)]);
         return null;
@@ -235,7 +256,6 @@ export class Service {
         : { type: 'prepare-notice', filename: job.filename, notice: p.decision.notice, stamp: job.created_at.toISOString() };
       return { pid, task };
     });
-    if (prep) await this.#prepare(jid, prep.pid, prep.task);
   }
 
   async #prepare(jid: string, pid: string, task: PrepareTask) {
@@ -272,7 +292,10 @@ export class Service {
   /** Something session-wide changed (memory, roll): re-plan every open job; bump revisions only where the plan moved. */
   async #refreshOpenJobs(sid: string, reason: string, except?: string) {
     const rows = await this.db.q<{ id: string }>(`select id from jobs where session_id = $1 and status = 'ready' order by created_at`, [sid]);
-    for (const r of rows) if (r.id !== except) await this.#replan(r.id, { reason, bump: true, onlyIfChanged: true });
+    // Invalidate every affected job first, then prepare: no stale proposal waits behind another job's preparation (Codex R5-1).
+    const preps: Array<[string, { pid: string; task: PrepareTask }]> = [];
+    for (const r of rows) if (r.id !== except) { const p = await this.#planJob(r.id, { reason, bump: true, onlyIfChanged: true }); if (p) preps.push([r.id, p]); }
+    for (const [jid, p] of preps) await this.#prepare(jid, p.pid, p.task);
   }
 
   async #lockJob(q: Q, sid: string, jid: string) {
@@ -293,16 +316,18 @@ export class Service {
       let next: Params = { ...job.params };
       if ('intent' in params) {
         // A new job type invalidates every type-specific choice made so far.
-        next = { targetW: next.targetW, targetH: next.targetH };
-        if (params.intent) next.intent = params.intent; else delete next.intent;
+        // Sizes too: a preset chosen for stickers is not a poster size (Codex R5-2).
+        next = params.intent ? { intent: params.intent } : {};
       }
-      for (const [k, v] of Object.entries(params)) if (k !== 'intent') (next as Record<string, unknown>)[k] = v;
+      for (const [k, v] of Object.entries(params)) if (k !== 'intent') { if (v === null) delete (next as Record<string, unknown>)[k]; else (next as Record<string, unknown>)[k] = v; }
       const revision = job.revision + 1;
       await q('update jobs set params = $2::jsonb, revision = $3 where id = $1', [jid, JSON.stringify(next), revision]);
       await this.#supersede(q, jid, 'operator-decision');
       await this.#event(q, jid, 'operator-decision', { params, revision, manual: !!body.manual });
       const modelTop = job.prediction?.top;
       if (params.intent && !body.manual && modelTop && params.intent !== (job.plan?.intent ?? modelTop)) {
+        // One active lesson per job: correcting a correction replaces it; the history stays in the audit trail (Codex R5-3).
+        await q('delete from corrections where session_id = $1 and job_id = $2', [sid, jid]);
         await q('insert into corrections (session_id, job_id, filename, from_intent, intent, x) values ($1,$2,$3,$4,$5,$6::jsonb)', [sid, jid, job.filename, job.plan?.intent ?? modelTop, params.intent, JSON.stringify(job.features)]);
         await this.#event(q, jid, 'intent-corrected', { from: job.plan?.intent ?? modelTop, to: params.intent, modelPTop: job.prediction?.pTop, remembered: true });
         corrected = true;
@@ -313,8 +338,8 @@ export class Service {
         if (gone.length) { await this.#event(q, jid, 'correction-withdrawn', { count: gone.length }); corrected = true; }
       }
     });
-    await this.#replan(jid, { reason: corrected ? 'intent-corrected' : 'operator-decision' });
     if (corrected) this.#bg(this.#refreshOpenJobs(sid, 'session-memory-updated', jid));
+    await this.#replan(jid, { reason: corrected ? 'intent-corrected' : 'operator-decision' });
     return this.view(sid, jid);
   }
 
@@ -353,6 +378,9 @@ export class Service {
       if (body.artifactSha256 !== p.artifact_sha256) return refuse(409, 'artifact-mismatch', 'The approval does not match the prepared artifact.');
       if (p.policy_version !== POLICY_VERSION || p.model_version !== this.model.version) return refuse(409, 'policy-changed', 'Policy or model changed since this was prepared.');
       if (!p.artifact || sha(p.artifact) !== p.artifact_sha256 || bindingHash(job, p) !== p.binding_hash) return refuse(409, 'binding-mismatch', 'Stored artifact does not match its binding.');
+      // Memory or roll may have moved since this was prepared, and reconciling other jobs takes time: approve only what
+      // RollCue would still decide right now (Codex R5-1).
+      if (signature((await this.#freshPlan(q, job)).p) !== signature(job.plan)) return refuse(409, 'superseded', 'RollCue’s reading of this job changed after a correction or setting. Review the current decision.');
       const by = 'operator:' + sha(sid).slice(0, 8);
       const [row] = await q<ProposalRow>(`update proposals set status = 'approved', approved_at = now(), approved_by = $2 where id = $1 returning *`, [p.id, by]);
       await this.#event(q, jid, 'approved', { proposal: p.id, artifactSha256: p.artifact_sha256, bindingHash: p.binding_hash, by });
@@ -363,6 +391,8 @@ export class Service {
       const r = refused as { proposal: string; error: HttpError };
       // Recorded in its own transaction so the refusal is part of the audit trail.
       await this.db.tx((q) => this.#event(q, jid, 'approval-refused', { proposal: r.proposal, code: r.error.code }));
+      // Bring the job up to date now, so the operator's reload shows the current decision being prepared.
+      if (r.error.code === 'superseded') { const prep = await this.#planJob(jid, { reason: 'reading-changed', bump: true, onlyIfChanged: true }); if (prep) this.#bg(this.#prepare(jid, prep.pid, prep.task)); }
       throw r.error;
     }
     if (approved) try { await this.#execute(jid, approved); } finally { this.#executing.delete(approved.id); }

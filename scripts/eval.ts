@@ -6,7 +6,7 @@ import { memoryOf, predict, standardise, MEMORY, type ModelFile } from '../src/m
 import { genCase, makeFile, variantOf } from '../dataset/gen.ts';
 import { inspect } from '../src/inspect.ts';
 import { featurize } from '../src/features.ts';
-import { evidenceOf, outOfScope } from '../src/policy.ts';
+import { evidenceOf, memoryOverturns, outOfScope } from '../src/policy.ts';
 
 type Row = { x: number[]; intent: Intent; id: string; intake?: any; shape?: string; notes?: string; tags?: string[]; split?: string; uncertain?: boolean };
 const model: ModelFile = JSON.parse(readFileSync('src/model.json', 'utf8'));
@@ -65,7 +65,7 @@ const slice = (pred: (c: Row) => boolean) => { const s = test.filter(pred); retu
 // memory. Then score (a) the corrected job itself, (b) 5 regenerated near-variants of it (same customer, similar job),
 // and (c) every other test case, before and after. (c) measures collateral damage.
 const wrong = test.filter((c) => predict(model, c.x).top !== c.intent);
-let fixed = 0, varBefore = 0, varAfter = 0, varN = 0, otherBefore = 0, otherAfter = 0, otherN = 0, otherMatched = 0, otherChanged = 0, otherHelped = 0, otherHarmed = 0;
+let fixed = 0, varBefore = 0, varAfter = 0, varN = 0, otherBefore = 0, otherAfter = 0, otherN = 0, otherMatched = 0, otherChanged = 0, otherHelped = 0, otherHarmed = 0, varApplied = 0, varAsked = 0, harmedAsked = 0;
 for (const w of wrong) {
   const mem = memoryOf([{ jobId: w.id, filename: 'x', intent: w.intent, x: w.x }]);
   fixed += +(predict(model, w.x, mem).top === w.intent);
@@ -75,14 +75,17 @@ for (const w of wrong) {
     const v = variantOf(base, k);
     const { inspection } = await inspect(await makeFile(v.file));
     const x = featurize(inspection, v.intake);
-    varBefore += +(predict(model, x).top === intent); varAfter += +(predict(model, x, mem).top === intent); varN++;
+    const pm = predict(model, x, mem);
+    varBefore += +(predict(model, x).top === intent); varAfter += +(pm.top === intent); varN++;
+    // Under policy: a non-duplicate correction that overturns the model becomes a one-tap question (Codex R5-4).
+    if (memoryOverturns(pm)) varAsked++; else varApplied += +(pm.top === intent);
   }
   for (const c of test) {
     if (c === w) continue;
     const p = predict(model, c.x, mem), p0 = predict(model, c.x);
     otherBefore += +(p0.top === c.intent); otherAfter += +(p.top === c.intent); otherN++;
     if (p.memory.length) otherMatched++;
-    if (p.top !== p0.top) { otherChanged++; if (p.top === c.intent) otherHelped++; else if (p0.top === c.intent) otherHarmed++; }
+    if (p.top !== p0.top) { otherChanged++; if (p.top === c.intent) otherHelped++; else if (p0.top === c.intent) { otherHarmed++; if (memoryOverturns(p)) harmedAsked++; } }
   }
 }
 
@@ -145,6 +148,8 @@ const out = {
     nearVariants: varN, nearVariantTop1Before: r3(varBefore / Math.max(1, varN)), nearVariantTop1After: r3(varAfter / Math.max(1, varN)),
     otherPairs: otherN, othersTop1Before: r3(otherBefore / Math.max(1, otherN)), othersTop1After: r3(otherAfter / Math.max(1, otherN)),
     otherPairsMatchedByMemory: otherMatched, otherPairsTopChanged: otherChanged, otherPairsHelped: otherHelped, otherPairsHarmed: otherHarmed,
+    // What the operator actually sees once policy gates memory (Codex R5-4).
+    underPolicy: { nearVariantsAppliedRight: r3(varApplied / Math.max(1, varN)), nearVariantsAsked: r3(varAsked / Math.max(1, varN)), otherPairsHarmedApplied: otherHarmed - harmedAsked, otherPairsHarmedAsked: harmedAsked },
   },
   handset: hand.length ? {
     ...metrics(hand), keywordBaseline: keywordBaseline(hand),
