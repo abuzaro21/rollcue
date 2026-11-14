@@ -21,23 +21,24 @@ Notes and filename are tokenised and matched against a fixed lexicon (English an
 ## Model (`src/model.ts`)
 
 - Multinomial logistic regression: 4 classes, standardised inputs, L2 regularisation, trained by gradient descent (`scripts/train.ts`).
-- **Calibration:** a temperature fitted on the validation split (T = 0.7).
+- **Calibration:** a temperature fitted on the validation split (T = 0.75).
 - **Bands:** `confident` at p ≥ 0.9, `likely` at p ≥ 0.35.
 - **Abstention:** the model abstains when the top probability is below 0.35 or the margin to the second is below 0.4. These thresholds give the widest coverage with ≥ 97% accepted accuracy on validation. Abstention produces an `intent` decision: a small visual choice of the top intents.
-- **Explanation:** each feature's contribution to the margin between the top intent and the runner-up, (w_top − w_second) × standardised value. The card shows the strongest contributions for and against, **only for features present in this job**. These are the model's real reasons, not generated text.
+- **Explanation:** each feature's contribution to the margin between the top intent and the runner-up, (w_top − w_second) × standardised value. The card shows the strongest contributions for and against, **only for features present in this job**. A contribution is relative to the training average, so a value below average is labelled "(less than usual)", and a negated mention reads "Notes rule out …". These are the model's real numbers, not generated text, but they are not a complete causal account: the bias term, absent features and correction memory are not itemised.
 
 ## Evidence gate (`src/policy.ts` `evidenceOf`)
 
 The probabilities are calibrated on synthetic data, so a confident call can still rest on weak ground. A reading is marked **thin evidence** when either:
 
-- the filename carries at least 35% of the positive evidence for the top intent, or
-- the job came with at most one of: quantity, size, media, notes.
+- the filename carries at least 35% of all positive evidence for the top intent (every present feature, not only the five shown), or
+- the job came with at most one meaningful instruction: quantity, a width or height, media, or notes that say something about the job ("thanks" does not count), or
+- remembered corrections changed the reading away from what the model alone says.
 
-Thin evidence does not change the reading. It changes the chip to "thin evidence" and adds a note: "Check this one before approving." On the held-out synthetic set it flags 4 of the 8 confident-and-wrong cases. On the hand-written set it flags the only confident-and-wrong case. It also flags some correct calls (69 of 543 confident correct synthetic cases); that is the cost of looking twice.
+Thin evidence does not change the reading. It changes the chip to "thin evidence" and adds a note: "Check this one before approving." On the held-out synthetic set it flags only 2 of the 6 confident-and-wrong cases. On the hand-written set it flags the only confident-and-wrong case. It also flags some correct calls (60 of 538 confident correct synthetic cases); that is the cost of looking twice.
 
 ## Correction memory
 
-When the operator corrects an intent, the job's feature vector and the corrected intent are stored for the session. For each new job, remembered corrections vote through a similarity kernel: similarity = exp(−mean squared difference of the standardised features ÷ τ), τ = 0.08, strength β = 6, ignored below 0.05 similarity. A near-duplicate (similarity ≥ 0.9) overrides the model with a boost of 40 logits, because the operator has already answered that question. The frozen model's weights never change. Details and measurements: [WRONG-GUESS-RECOVERY.md](WRONG-GUESS-RECOVERY.md).
+When the operator corrects an intent, the job's feature vector and the corrected intent are stored for the session. For each new job, remembered corrections vote through a similarity kernel: similarity = exp(−mean squared difference of the standardised features ÷ τ), τ = 0.08, strength β = 6, ignored below 0.05 similarity. A near-duplicate (similarity ≥ 0.9) overrides the model with a boost of 40 logits, because the operator has probably already answered that question. Similarity is not proof, so whenever memory moves the reading away from the model's own, the job is flagged as thin evidence and names the correction responsible. The frozen model's weights never change. Details and measurements: [WRONG-GUESS-RECOVERY.md](WRONG-GUESS-RECOVERY.md).
 
 ## What decides production, and what does not
 
@@ -47,11 +48,11 @@ The model only decides **which job** this is. Everything after that is determini
 
 Real customer files are private and were not used. `dataset/gen.ts` generates 1,600 synthetic jobs as real PDF, PNG and JPEG files with matching intake fields: varied shapes, sizes, resolutions, spot colours, notes (English and Arabic), misleading filenames and contradictory notes. `scripts/build-dataset.ts` runs every file through the same `inspect` and `features` code as a live upload.
 
-The split is by generator family, so the test set is not near-duplicates of training:
+The split holds out generator families. That is real separation for shapes and note phrasing, but not for everything: poster sizes, filename templates and most notes vectors are shared, and 53 of 626 test jobs are near-duplicates of a training job (3 are identical). [INFERENCE-EVALUATION.md](INFERENCE-EVALUATION.md) reports accuracy with and without them.
 
 - **test (626):** every case with a held-out shape kind (`star`, `rect-stripe`, `poster-grid`, `banner-split`) or the held-out note-phrasing family `C`.
 - **train (756) / validation (218):** the rest, split 80/20 by seeded random draw.
 
-A separate set of 32 hand-written edge cases (`dataset/handset.ts`) was authored to probe known weaknesses and is never used for training or threshold selection.
+A separate set of 32 hand-written edge cases (`dataset/handset.ts`) was authored to probe known weaknesses and is never used for training or threshold selection. Their files come from the same renderer, so they are independent scenarios, not independent artwork.
 
 Results: [INFERENCE-EVALUATION.md](INFERENCE-EVALUATION.md).

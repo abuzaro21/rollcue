@@ -1,6 +1,6 @@
 {
- "model": "rc-intent-8c9b8fb884",
- "temperature": 0.7,
+ "model": "rc-intent-480403c831",
+ "temperature": 0.75,
  "abstain": {
   "minProb": 0.35,
   "minMargin": 0.4
@@ -12,15 +12,15 @@
  "generatedAt": "2026-11-14",
  "syntheticTest": {
   "n": 626,
-  "top1": 0.941,
-  "top2": 0.982,
-  "macroF1": 0.931,
-  "brier": 0.088,
-  "ece": 0.017,
-  "abstainRate": 0.051,
-  "acceptedAccuracy": 0.963,
-  "wrongAccepted": 22,
-  "wrongConfident": 8,
+  "top1": 0.947,
+  "top2": 0.987,
+  "macroF1": 0.937,
+  "brier": 0.077,
+  "ece": 0.009,
+  "abstainRate": 0.05,
+  "acceptedAccuracy": 0.97,
+  "wrongAccepted": 18,
+  "wrongConfident": 6,
   "confusion": {
    "sticker": {
     "sticker": 77,
@@ -41,10 +41,10 @@
     "banner": 0
    },
    "banner": {
-    "sticker": 3,
-    "label": 2,
-    "poster": 8,
-    "banner": 218
+    "sticker": 1,
+    "label": 4,
+    "poster": 4,
+    "banner": 222
    }
   },
   "reliability": [
@@ -68,59 +68,61 @@
    },
    {
     "bin": "0.3-0.4",
-    "n": 0,
-    "meanConf": null,
-    "accuracy": null
+    "n": 3,
+    "meanConf": 0.393,
+    "accuracy": 0
    },
    {
     "bin": "0.4-0.5",
     "n": 2,
-    "meanConf": 0.46,
+    "meanConf": 0.448,
     "accuracy": 0.5
    },
    {
     "bin": "0.5-0.6",
-    "n": 15,
-    "meanConf": 0.539,
-    "accuracy": 0.533
+    "n": 16,
+    "meanConf": 0.548,
+    "accuracy": 0.563
    },
    {
     "bin": "0.6-0.7",
-    "n": 17,
-    "meanConf": 0.648,
-    "accuracy": 0.471
+    "n": 13,
+    "meanConf": 0.647,
+    "accuracy": 0.538
    },
    {
     "bin": "0.7-0.8",
-    "n": 24,
-    "meanConf": 0.741,
-    "accuracy": 0.667
+    "n": 20,
+    "meanConf": 0.75,
+    "accuracy": 0.75
    },
    {
     "bin": "0.8-0.9",
-    "n": 17,
-    "meanConf": 0.866,
-    "accuracy": 0.765
+    "n": 28,
+    "meanConf": 0.857,
+    "accuracy": 0.821
    },
    {
     "bin": "0.9-1",
-    "n": 551,
+    "n": 544,
     "meanConf": 0.992,
-    "accuracy": 0.985
+    "accuracy": 0.989
    }
   ]
  },
  "evidenceGate": {
   "syntheticTest": {
-   "flaggedRate": 0.166,
-   "confident": 551,
-   "wrongConfident": 8,
-   "wrongConfidentFlagged": 4,
-   "rightConfident": 543,
-   "rightConfidentFlagged": 69
+   "flaggedOfAllJobs": 0.16,
+   "flaggedOfConfidentCalls": 0.114,
+   "confident": 544,
+   "wrongConfident": 6,
+   "wrongConfidentFlagged": 2,
+   "rightConfident": 538,
+   "rightConfidentFlagged": 60
   },
   "handset": {
-   "flaggedRate": 0.219,
+   "flaggedOfAllJobs": 0.219,
+   "flaggedOfConfidentCalls": 0.167,
    "confident": 24,
    "wrongConfident": 1,
    "wrongConfidentFlagged": 1,
@@ -129,27 +131,41 @@
   }
  },
  "keywordBaseline": 0.681,
+ "overlapWithTraining": {
+  "exactDuplicates": 3,
+  "exactDuplicatesWithOtherIntent": 0,
+  "nearDuplicates": 53,
+  "nearDuplicateTop1": 0.981,
+  "novel": 573,
+  "novelTop1": 0.944,
+  "novelAbstain": 0.051,
+  "novelWrongConfident": 6
+ },
+ "scopeFalseReturns": {
+  "syntheticTest": 0,
+  "handset": 0
+ },
  "ablations": {
-  "noTextFeatures": 0.903,
-  "noFilename": 0.922,
-  "noNotes": 0.917
+  "noTextFeatures": 0.915,
+  "noFilename": 0.936,
+  "noNotes": 0.925
  },
  "slices": {
   "misleadingFilename": {
    "n": 107,
-   "top1": 0.85
+   "top1": 0.86
   },
   "conflictingNotes": {
    "n": 50,
-   "top1": 0.8
+   "top1": 0.82
   },
-  "noSize": {
+  "noRequestedSize": {
    "n": 222,
-   "top1": 0.901
+   "top1": 0.914
   },
-  "noDensity": {
+  "noEmbeddedDensity": {
    "n": 125,
-   "top1": 0.904
+   "top1": 0.928
   },
   "opaqueSticker": {
    "n": 23,
@@ -161,15 +177,15 @@
   },
   "scaledArtwork": {
    "n": 154,
-   "top1": 0.922
+   "top1": 0.935
   },
   "heldOutShapes": {
    "n": 510,
-   "top1": 0.931
+   "top1": 0.941
   },
   "heldOutPhrasing": {
    "n": 169,
-   "top1": 0.982
+   "top1": 0.976
   },
   "arabicNotes": {
    "n": 67,
@@ -177,7 +193,7 @@
   },
   "noNotes": {
    "n": 173,
-   "top1": 0.89
+   "top1": 0.896
   }
  },
  "correction": {
@@ -188,23 +204,26 @@
    "nearDuplicate": 0.9,
    "override": 40
   },
-  "wrongPredictions": 37,
+  "wrongPredictions": 33,
   "correctedCaseNowRight": 1,
-  "nearVariants": 185,
-  "nearVariantTop1Before": 0.038,
-  "nearVariantTop1After": 0.968,
-  "otherPairs": 23125,
-  "othersTop1Before": 0.942,
-  "othersTop1After": 0.942,
-  "othersTouchedByMemory": 0.001
+  "nearVariants": 165,
+  "nearVariantTop1Before": 0.042,
+  "nearVariantTop1After": 0.964,
+  "otherPairs": 20625,
+  "othersTop1Before": 0.949,
+  "othersTop1After": 0.949,
+  "otherPairsMatchedByMemory": 31,
+  "otherPairsTopChanged": 0,
+  "otherPairsHelped": 0,
+  "otherPairsHarmed": 0
  },
  "handset": {
   "n": 32,
-  "top1": 0.875,
+  "top1": 0.844,
   "top2": 1,
-  "macroF1": 0.883,
-  "brier": 0.179,
-  "ece": 0.088,
+  "macroF1": 0.847,
+  "brier": 0.177,
+  "ece": 0.081,
   "abstainRate": 0.125,
   "acceptedAccuracy": 0.929,
   "wrongAccepted": 2,
@@ -225,8 +244,8 @@
    "poster": {
     "sticker": 1,
     "label": 1,
-    "poster": 8,
-    "banner": 0
+    "poster": 7,
+    "banner": 1
    },
    "banner": {
     "sticker": 0,
@@ -263,8 +282,8 @@
    {
     "bin": "0.4-0.5",
     "n": 1,
-    "meanConf": 0.446,
-    "accuracy": 1
+    "meanConf": 0.457,
+    "accuracy": 0
    },
    {
     "bin": "0.5-0.6",
@@ -275,25 +294,25 @@
    {
     "bin": "0.6-0.7",
     "n": 1,
-    "meanConf": 0.62,
+    "meanConf": 0.611,
     "accuracy": 0
    },
    {
     "bin": "0.7-0.8",
     "n": 2,
-    "meanConf": 0.763,
+    "meanConf": 0.772,
     "accuracy": 0.5
    },
    {
     "bin": "0.8-0.9",
     "n": 2,
-    "meanConf": 0.845,
+    "meanConf": 0.88,
     "accuracy": 1
    },
    {
     "bin": "0.9-1",
     "n": 24,
-    "meanConf": 0.989,
+    "meanConf": 0.986,
     "accuracy": 0.958
    }
   ],
@@ -303,36 +322,44 @@
     "id": "coffee-round-sticker",
     "truth": "sticker",
     "top": "sticker",
-    "pTop": 0.9994,
+    "pTop": 0.999,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "jar-lid-round-label",
     "truth": "label",
     "top": "sticker",
-    "pTop": 0.6197,
+    "pTop": 0.6107,
     "band": "likely",
     "abstain": true,
+    "thin": false,
+    "uncertain": false,
     "ok": false
    },
    {
     "id": "stickers-final-window",
     "truth": "poster",
     "top": "sticker",
-    "pTop": 0.9999,
+    "pTop": 0.9998,
     "band": "confident",
     "abstain": false,
+    "thin": true,
+    "uncertain": true,
     "ok": false
    },
    {
     "id": "a4-posters-many",
     "truth": "poster",
     "top": "poster",
-    "pTop": 0.9993,
+    "pTop": 0.9988,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
@@ -342,213 +369,261 @@
     "pTop": 0.9999,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "table-banner",
     "truth": "banner",
     "top": "banner",
-    "pTop": 0.9998,
+    "pTop": 0.9997,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "roll-up",
     "truth": "banner",
     "top": "banner",
-    "pTop": 0.9935,
+    "pTop": 0.9891,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "negated-sticker",
     "truth": "poster",
     "top": "poster",
-    "pTop": 0.9879,
+    "pTop": 0.9843,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "banner-named-label",
     "truth": "label",
     "top": "label",
-    "pTop": 0.9995,
+    "pTop": 0.9992,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "arabic-label",
     "truth": "label",
     "top": "label",
-    "pTop": 0.9992,
+    "pTop": 0.9986,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "arabic-banner-1to10",
     "truth": "banner",
     "top": "banner",
-    "pTop": 0.9997,
+    "pTop": 0.9994,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "no-info-circle",
     "truth": "sticker",
     "top": "sticker",
-    "pTop": 0.9793,
+    "pTop": 0.9852,
     "band": "confident",
     "abstain": false,
+    "thin": true,
+    "uncertain": true,
     "ok": true
    },
    {
     "id": "square-sticker",
     "truth": "sticker",
     "top": "sticker",
-    "pTop": 0.9924,
+    "pTop": 0.989,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "drum-label",
     "truth": "label",
     "top": "label",
-    "pTop": 0.9998,
+    "pTop": 0.9996,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "scaffold-mesh",
     "truth": "banner",
     "top": "banner",
-    "pTop": 0.9986,
+    "pTop": 0.9982,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "cutout-window-poster",
     "truth": "poster",
     "top": "poster",
-    "pTop": 0.9325,
+    "pTop": 0.9016,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "low-res-photo-poster",
     "truth": "poster",
     "top": "poster",
-    "pTop": 0.7354,
+    "pTop": 0.7846,
     "band": "likely",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "sticker-sheet",
     "truth": "sticker",
     "top": "sticker",
-    "pTop": 0.9861,
+    "pTop": 0.9805,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "typo-poster-for-jars",
     "truth": "label",
     "top": "sticker",
-    "pTop": 0.5159,
+    "pTop": 0.5089,
     "band": "likely",
     "abstain": true,
+    "thin": false,
+    "uncertain": false,
     "ok": false
    },
    {
     "id": "sticker-with-cut",
     "truth": "sticker",
     "top": "sticker",
-    "pTop": 0.9928,
+    "pTop": 0.989,
     "band": "confident",
     "abstain": false,
+    "thin": true,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "label-with-cut",
     "truth": "label",
     "top": "label",
-    "pTop": 0.9996,
+    "pTop": 0.9993,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "a2-png-no-density",
     "truth": "poster",
     "top": "poster",
-    "pTop": 0.9977,
+    "pTop": 0.9961,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "banner-named-poster",
     "truth": "banner",
     "top": "banner",
-    "pTop": 0.847,
-    "band": "likely",
+    "pTop": 0.9048,
+    "band": "confident",
     "abstain": false,
+    "thin": true,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "tiny-label",
     "truth": "label",
     "top": "label",
-    "pTop": 0.9134,
-    "band": "confident",
+    "pTop": 0.8966,
+    "band": "likely",
     "abstain": false,
+    "thin": true,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "opaque-badge-sticker",
     "truth": "sticker",
     "top": "sticker",
-    "pTop": 0.9977,
+    "pTop": 0.9967,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "vinyl-wall-print",
     "truth": "poster",
-    "top": "poster",
-    "pTop": 0.4464,
+    "top": "banner",
+    "pTop": 0.4574,
     "band": "likely",
     "abstain": true,
-    "ok": true
+    "thin": false,
+    "uncertain": false,
+    "ok": false
    },
    {
     "id": "bare-pdf-poster",
     "truth": "poster",
     "top": "poster",
-    "pTop": 0.545,
+    "pTop": 0.5511,
     "band": "likely",
     "abstain": true,
+    "thin": true,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "record-label-party",
     "truth": "poster",
     "top": "label",
-    "pTop": 0.7906,
+    "pTop": 0.7603,
     "band": "likely",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": false
    },
    {
@@ -558,34 +633,54 @@
     "pTop": 1,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "eyelets-no-size",
     "truth": "banner",
     "top": "banner",
-    "pTop": 0.8424,
+    "pTop": 0.8634,
     "band": "likely",
     "abstain": false,
+    "thin": true,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "bottle-neck-label",
     "truth": "label",
     "top": "label",
-    "pTop": 0.9748,
+    "pTop": 0.9673,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
    },
    {
     "id": "decal-named-poster",
     "truth": "poster",
     "top": "poster",
-    "pTop": 0.9955,
+    "pTop": 0.993,
     "band": "confident",
     "abstain": false,
+    "thin": false,
+    "uncertain": false,
     "ok": true
+   }
+  ],
+  "uncertainHandled": [
+   {
+    "id": "stickers-final-window",
+    "abstained": false,
+    "flaggedThin": true
+   },
+   {
+    "id": "no-info-circle",
+    "abstained": false,
+    "flaggedThin": true
    }
   ]
  }

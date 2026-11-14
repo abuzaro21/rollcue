@@ -53,7 +53,7 @@ Codex: keep the deployed model frozen; the correction becomes a hard constraint 
 4. The first implementation was a bounded weight-delta adapter, as planned. It was replaced by the kernel memory because it hurt unrelated jobs: accuracy on them fell from 98.3% to 90.3% after corrections. That was measured on an earlier, easier version of the synthetic benchmark, before the generator was widened. A weight change shifts every job's score; the kernel memory changes only jobs that resemble a correction.
 5. Corrections are stored as labelled evidence for a future, separately evaluated model version.
 
-Measured on the held-out set ([INFERENCE-EVALUATION.md](INFERENCE-EVALUATION.md)): the corrected case is right afterwards (1.0), near-variants are right 96.8% of the time, accuracy on other jobs is unchanged (94.2% before and after), and memory changes the top intent of 0.1% of unrelated jobs.
+Measured on the held-out set ([INFERENCE-EVALUATION.md](INFERENCE-EVALUATION.md)): the corrected case is right afterwards (1.0), near-variants are right 96.4% of the time, accuracy on other jobs is unchanged (94.9% before and after), and memory changed the top intent of none of 20,625 correction–job pairs. A memory-driven reading that disagrees with the model is flagged for checking.
 
 **Evidence gate.** A confident reading is flagged "thin evidence" when the filename carries at least 35% of the decision or at most one context signal supports it. The flag does not change the reading; it tells the operator to look before approving. On the hand-written set it flags the one confident wrong case.
 

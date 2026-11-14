@@ -79,7 +79,7 @@ function IntentLine({ job, open, setOpen }: { job: JobView; open: boolean; setOp
             : <span className={`chip ${plan.evidence.thin ? 'thin' : pred.band}`}>{plan.evidence.thin ? 'thin evidence' : pred.band}</span>}
         <button type="button" className="link" aria-expanded={open} onClick={() => setOpen(!open)}>Not this?</button>
       </div>
-      {plan.intentSource === 'model' && plan.evidence.thin && !mem && (
+      {plan.intentSource === 'model' && plan.evidence.thin && (
         <p className="thin-note" role="note">
           <strong>Check this one.</strong> {plan.evidence.reasons.join(' ')}
         </p>

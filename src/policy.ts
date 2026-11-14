@@ -1,15 +1,17 @@
 // Deterministic production policy. Given the measured inspection, the partial intake, the inferred (or operator-chosen)
 // intent and the operator's bounded parameters, compute every check and select ONE next decision with a prepared
 // action. Versioned: every approval binds POLICY_VERSION. Learning never changes anything in this file.
-import { INTENT_LABEL, effectivePpi, targetSize, type Intake, type Intent } from './features.ts';
+import { INTENT_LABEL, effectivePpi, targetSize, textGroups, type Intake, type Intent } from './features.ts';
 import type { Inspection } from './inspect.ts';
 import type { Prediction } from './model.ts';
 import { rollLayout, DEFAULT_ROLL, type Layout, type RollSettings } from './layout.ts';
 
-export const POLICY_VERSION = 'rc-policy-2';
+export const POLICY_VERSION = 'rc-policy-3';
 
 /** Work this shop does not prepare on roll media. The model only knows four intents, so this is a hard boundary in policy, not a guess. */
-export const OUT_OF_SCOPE = /\b(packaging|cartons?|die-?lines?|folding box(es)?|tuck box(es)?|gable box(es)?)\b|تغليف|كرتون/i;
+// "Packaging labels" and "packaging stickers" are labels and stickers, not packaging manufacture (Codex R2-3).
+export const OUT_OF_SCOPE = /\b(packaging(?!\s+(labels?|stickers?)\b)|cartons?|die-?lines?|folding box(es)?|tuck box(es)?|gable box(es)?)\b|تغليف|كرتون/i;
+export const outOfScope = (intake: Pick<Intake, 'notes' | 'filename'>) => OUT_OF_SCOPE.exec(`${intake.notes} ${intake.filename}`);
 
 export const PPI = {
   sticker: { fail: 150, warn: 240 }, label: { fail: 200, warn: 280 }, poster: { fail: 100, warn: 150 }, banner: { fail: 40, warn: 72 },
@@ -63,12 +65,16 @@ const size = (w: number, h: number) => `${mm(w)} × ${mm(h)} mm`;
  * filename, or the job arrived with almost no instructions, the surface must say so instead of looking certain.
  */
 export function evidenceOf(p: Prediction, intake: Intake): Evidence {
-  const pos = p.forTop.reduce((s, e) => s + e.weight, 0);
-  const fileShare = pos > 0 ? p.forTop.filter((e) => e.feature.startsWith('file_')).reduce((s, e) => s + e.weight, 0) / pos : 0;
-  const signals = [intake.qty, intake.reqW, intake.media, /\S/.test(intake.notes) ? 1 : null].filter((v) => v !== null && v !== undefined && v !== 0).length;
+  const fileShare = p.filenameShare ?? 0;
+  // Notes count only when they say something about the job; "thanks" is not evidence (Codex R2-4).
+  const notesSay = Object.values(textGroups(intake.notes)).some((v) => v !== 0);
+  const signals = [intake.qty, intake.reqW || intake.reqH, intake.media, notesSay ? 1 : null].filter((v) => v !== null && v !== undefined && v !== 0).length;
   const reasons: string[] = [];
   if (fileShare >= 0.35) reasons.push(`Most of the evidence for ${INTENT_LABEL[p.top].toLowerCase()} is the filename.`);
   if (signals <= 1) reasons.push('The job came with almost no instructions (size, quantity, media or notes).');
+  // A remembered correction can carry a reading the model alone disagrees with; similarity is not proof (Codex R2-2).
+  const modelTop = (Object.entries(p.modelProbs ?? p.probs) as Array<[Intent, number]>).sort((a, b) => b[1] - a[1])[0][0];
+  if (p.memory.length && modelTop !== p.top) reasons.push(`Read as ${INTENT_LABEL[p.top].toLowerCase()} only because you corrected ${p.memory[0].filename}; the model alone reads ${INTENT_LABEL[modelTop].toLowerCase()}.`);
   return { thin: reasons.length > 0, reasons, filenameShare: Math.round(fileShare * 100) / 100, contextSignals: signals };
 }
 
@@ -80,7 +86,7 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
   const add = (id: string, label: string, status: CheckStatus, detail: string) => checks.push({ id, label, status, detail });
 
   // --- scope: an explicit mention of work RollCue does not prepare stops the model's reading (the operator can override) ---
-  const scopeHit = params.intent ? null : OUT_OF_SCOPE.exec(`${intake.notes} ${intake.filename}`);
+  const scopeHit = params.intent ? null : outOfScope(intake);
   if (scopeHit) {
     add('scope', 'Supported work', 'fail', `The job mentions “${scopeHit[0]}”. RollCue prepares stickers, labels, posters and banners only.`);
     const options: Option[] = [

@@ -118,8 +118,9 @@ export function featurize(ins: Inspection, intake: Intake): number[] {
   const file = textGroups(intake.filename.replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[_.]+/g, ' '));
   const ppi = effectivePpi(ins, t);
   const m = ins.mask;
-  const aspectFromPixels = ins.widthMm && ins.heightMm ? Math.max(ins.widthMm, ins.heightMm) / Math.min(ins.widthMm, ins.heightMm) : null;
-  const aspect = t ? Math.max(t.w, t.h) / Math.min(t.w, t.h) : aspectFromPixels ?? 1;
+  const aspectFromFile = ins.widthMm && ins.heightMm ? Math.max(ins.widthMm, ins.heightMm) / Math.min(ins.widthMm, ins.heightMm)
+    : ins.pixels ? Math.max(ins.pixels.w, ins.pixels.h) / Math.min(ins.pixels.w, ins.pixels.h) : null; // Codex R2-2: no density ≠ square
+  const aspect = t ? Math.max(t.w, t.h) / Math.min(t.w, t.h) : aspectFromFile ?? 1;
   const mismatch = intake.reqW && ins.widthMm ? Math.abs(Math.log(intake.reqW / ins.widthMm)) : 0;
   const v: Record<string, number> = {
     size_known: t ? 1 : 0,

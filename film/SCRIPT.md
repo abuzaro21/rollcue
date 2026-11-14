@@ -18,6 +18,6 @@ Target 89–90 s. 1920×1080, 30 fps. Every product frame is a real capture of t
 Word count target: about 190–210 words at a calm pace.
 
 Honesty notes for the edit:
-- Scene 7 claim "nothing unrelated moves": the measured effect on unrelated jobs is 0.1%, not zero. Keep the line only if the on-screen evidence shows the other open jobs unchanged; otherwise say "and unrelated jobs stay as they were".
+- Scene 7 claim "nothing unrelated moves": in the evaluation, memory changed the top intent of 0 of 20,625 correction–job pairs, but it did match 31. Say "unrelated jobs stay as they were" only if the on-screen jobs show it, and never "it can never affect anything else".
 - Scene 9 numbers come from `docs/evidence/comparison.json` at the time of recording.
 - The voice is synthetic (Kokoro-82M, local). The end card and AI-DISCLOSURE say so.

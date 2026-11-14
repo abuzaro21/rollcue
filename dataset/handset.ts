@@ -4,7 +4,8 @@
 import type { FileSpec } from './gen.ts';
 import type { Intake, Intent } from '../src/features.ts';
 
-export type HandCase = { id: string; intent: Intent; why: string; file: Omit<FileSpec, 'seed'>; intake: Partial<Intake> & { filename: string } };
+/** uncertain: the right behaviour is to abstain or flag thin evidence, not a confident answer. Scored separately. */
+export type HandCase = { id: string; intent: Intent; why: string; uncertain?: true; file: Omit<FileSpec, 'seed'>; intake: Partial<Intake> & { filename: string } };
 
 const png = (shape: FileSpec['shape'], w: number, h: number, ppi: number | null, opaqueBg = false): Omit<FileSpec, 'seed'> =>
   ({ format: 'png', shape, wMm: w, hMm: h, opaqueBg, px: Math.round((Math.max(w, h) / 25.4) * (ppi ?? 300)), densityMeta: ppi !== null });
@@ -14,7 +15,7 @@ const pdf = (shape: FileSpec['shape'], w: number, h: number, extra: Partial<File
 export const HANDSET: HandCase[] = [
   { id: 'coffee-round-sticker', intent: 'sticker', why: 'Round transparent logo, vinyl, hundreds of pieces.', file: png('circle', 60, 60, 300), intake: { filename: 'coffee-logo.png', qty: 500, media: 'vinyl', notes: 'for the coffee bags' } },
   { id: 'jar-lid-round-label', intent: 'label', why: 'Same geometry as a round sticker; label stock and "jars" say label.', file: png('circle', 50, 50, 300), intake: { filename: 'honey_lid.png', qty: 2000, media: 'label_stock', notes: 'lids of the honey jars' } },
-  { id: 'stickers-final-window', intent: 'poster', why: 'Ambiguous on purpose: transparent shape, sticker filename, no size or notes. The customer said on the phone it is one window poster.', file: pdf('blob', 210, 297), intake: { filename: 'stickers-final.pdf', qty: 1 } },
+  { id: 'stickers-final-window', intent: 'poster', why: 'Ambiguous on purpose: transparent shape, sticker filename, no size or notes. The customer said on the phone it is one window poster.', uncertain: true, file: pdf('blob', 210, 297), intake: { filename: 'stickers-final.pdf', qty: 1 } },
   { id: 'a4-posters-many', intent: 'poster', why: 'Small poster in a large quantity.', file: pdf('poster-full', 210, 297, { bleedMm: 3 }), intake: { filename: 'event_A4.pdf', qty: 150, media: 'paper', notes: 'flyers for the event, print as posters' } },
   { id: 'wall-decal', intent: 'sticker', why: 'Large sticker, tiny quantity.', file: pdf('blob', 800, 600), intake: { filename: 'kids-room.pdf', qty: 2, media: 'vinyl', notes: 'wall decal for the kids room, cut to shape' } },
   { id: 'table-banner', intent: 'banner', why: 'Short banner.', file: pdf('banner-bands', 1000, 300), intake: { filename: 'fair-table.pdf', qty: 1, media: 'pvc_banner', notes: 'table front for the fair' } },
@@ -23,7 +24,7 @@ export const HANDSET: HandCase[] = [
   { id: 'banner-named-label', intent: 'label', why: 'Misleading filename.', file: png('rect', 80, 50, 300, true), intake: { filename: 'banner_logo.png', qty: 5000, media: 'label_stock' } },
   { id: 'arabic-label', intent: 'label', why: 'Arabic notes.', file: pdf('rect-rounded', 90, 60), intake: { filename: 'honey.pdf', qty: 3000, notes: 'ليبلات للعسل' } },
   { id: 'arabic-banner-1to10', intent: 'banner', why: 'Supplied at 1:10 with the real size given; Arabic notes.', file: pdf('banner-bands', 300, 100), intake: { filename: 'shop.pdf', qty: 1, reqW: 3000, reqH: 1000, notes: 'يافطة للمحل' } },
-  { id: 'no-info-circle', intent: 'sticker', why: 'Almost no evidence: a circle PNG without density or intake. Abstaining is the right answer.', file: png('circle', 70, 70, null), intake: { filename: 'IMG_2231.png' } },
+  { id: 'no-info-circle', intent: 'sticker', why: 'Almost no evidence: a circle PNG without density or intake. Abstaining is the right answer.', uncertain: true, file: png('circle', 70, 70, null), intake: { filename: 'IMG_2231.png' } },
   { id: 'square-sticker', intent: 'sticker', why: 'Rounded square with transparent corners, but stickers.', file: png('rect-rounded', 70, 70, 300), intake: { filename: 'square.png', qty: 300, media: 'vinyl', notes: 'square stickers for the laptops' } },
   { id: 'drum-label', intent: 'label', why: 'Large label, small run.', file: pdf('rect', 250, 180), intake: { filename: 'drum.pdf', qty: 80, media: 'label_stock', notes: 'labels for the 20 L drums' } },
   { id: 'scaffold-mesh', intent: 'banner', why: 'Very long, mesh.', file: pdf('banner-split', 4000, 1200), intake: { filename: 'site.pdf', qty: 1, notes: 'mesh for scaffolding' } },

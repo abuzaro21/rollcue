@@ -1,22 +1,24 @@
 # Inference evaluation
 
-Source of truth: [`evidence/inference-eval.json`](evidence/inference-eval.json), produced by `npm run eval` from the committed model `rc-intent-8c9b8fb884`. CI re-runs the evaluation and fails if the numbers differ from the committed file.
+Source of truth: [`evidence/inference-eval.json`](evidence/inference-eval.json), produced by `npm run eval` from the committed model `rc-intent-480403c831`. CI re-runs the evaluation and fails if the numbers differ from the committed file.
 
-**Read these numbers with their limit in mind.** The test files are synthetic. They come from the same generator as the training files, with held-out shape kinds and note phrasing. They show that the method works and how it fails. They do not measure accuracy on real customer files, which has not been measured.
+**Read these numbers with their limit in mind.** The test files are synthetic. They come from the same generator and renderer as the training files, with held-out shape kinds and note phrasing. They show that the method works and how it fails. They do not measure accuracy on real customer files, which has not been measured.
+
+This page was revised after Codex review R2 ([reviews/R2-inference-eval.md](reviews/R2-inference-eval.md)). That review found that rasters without density metadata were featurised as square, along with several reporting errors. The model was retrained on the corrected features, and every figure below is from the retrained model.
 
 ## Held-out synthetic test set (n = 626)
 
 | Metric | Value |
 |---|---|
-| Top-1 accuracy | 94.1% |
-| Top-2 accuracy | 98.2% |
-| Macro F1 | 0.931 |
-| Brier score | 0.088 |
-| Expected calibration error | 0.017 |
-| Abstention rate | 5.1% |
-| Accuracy when not abstaining | 96.3% |
-| Wrong and not abstained | 22 |
-| Wrong and confident (p ≥ 0.9) | 8 |
+| Top-1 accuracy | 94.7% |
+| Top-2 accuracy | 98.7% |
+| Macro F1 | 0.937 |
+| Brier score | 0.077 |
+| Expected calibration error (10 equal-width bins) | 0.009 |
+| Abstention rate | 5.0% |
+| Accuracy when not abstaining | 97.0% |
+| Wrong and not abstained | 18 |
+| Wrong and confident (p ≥ 0.9) | 6 |
 | Keyword-only baseline (top-1) | 68.1% |
 
 Confusion (rows = truth, columns = predicted):
@@ -26,81 +28,115 @@ Confusion (rows = truth, columns = predicted):
 | **sticker** | 77 | 3 | 2 | 0 |
 | **label** | 9 | 129 | 1 | 0 |
 | **poster** | 3 | 6 | 165 | 0 |
-| **banner** | 3 | 2 | 8 | 218 |
+| **banner** | 1 | 4 | 4 | 222 |
 
 The commonest error is a label read as a sticker (9 cases). Both are cut, adhesive and small, so that is the expected weak spot.
+
+### How close is the test set to training?
+
+The split holds out shape kinds and a note-phrasing family, but other parts of the generator are shared across splits: poster sizes, filename templates and most notes vectors. So some test jobs look almost exactly like training jobs to the model. The table uses the memory kernel's similarity on standardised features.
+
+| | n | Top-1 |
+|---|---|---|
+| Identical feature vector in training | 3 | |
+| Near-duplicate of a training job (similarity ≥ 0.9) | 53 | 98.1% |
+| **Everything else** | **573** | **94.4%** (abstains 5.1%, 6 wrong and confident) |
+
+The fair headline is therefore about 94% on jobs that are not near-copies of training. This tests new combinations of generator parts more than genuinely new kinds of evidence.
 
 ### Slices
 
 | Slice | n | Top-1 |
 |---|---|---|
-| Held-out shape kinds | 510 | 93.1% |
-| Held-out note phrasing | 169 | 98.2% |
-| Misleading filename | 107 | 85.0% |
-| Notes contradict the artwork | 50 | 80.0% |
-| No notes | 173 | 89.0% |
+| Held-out shape kinds | 510 | 94.1% |
+| Held-out note phrasing | 169 | 97.6% |
+| Misleading filename | 107 | 86.0% |
+| Notes contradict the artwork | 50 | 82.0% |
+| No notes | 173 | 89.6% |
 | Arabic notes | 67 | 95.5% |
-| No physical size | 222 | 90.1% |
-| No resolution information | 125 | 90.4% |
+| No requested size (the file may still have one) | 222 | 91.4% |
+| No embedded density (effective resolution may still be known) | 125 | 92.8% |
 | Opaque sticker (no transparency to trace) | 23 | 78.3% |
 | Transparent poster | 22 | 86.4% |
-| Artwork scaled to a different order size | 154 | 92.2% |
+| Artwork scaled to a different order size | 154 | 93.5% |
 
-### Ablations (top-1 when a feature group is removed)
+### Masking feature groups at inference time
 
-| Removed | Top-1 |
+These numbers come from zeroing a feature group on the trained model, not from retraining without it.
+
+| Masked | Top-1 |
 |---|---|
-| Nothing | 94.1% |
-| All text features | 90.3% |
-| Filename | 92.2% |
-| Notes | 91.7% |
+| Nothing | 94.7% |
+| Filename and notes | 91.5% |
+| Filename | 93.6% |
+| Notes | 92.5% |
 
-Text helps, but most of the signal is in the artwork itself. A keyword-only classifier reaches 68.1%.
+With filename and notes masked, the model still has quantity, requested size and media as well as the file itself. So this shows the model is not a keyword matcher, but it does not show how much signal comes from the artwork alone. A keyword-only classifier reaches 68.1%.
+
+### Policy outcomes
+
+The model is not the only thing that can get a job wrong. Policy can also return a supported job as out of scope. Every test job is a supported intent, so any scope return is a false rejection. The count is **0 of 626** synthetic and **0 of 32** hand-written. This figure was added after R2 found nine "packaging labels" jobs being returned as packaging.
 
 ## Hand-written edge cases (n = 32)
 
-Authored separately to attack known weaknesses: misleading filenames, negated notes ("not a sticker"), Arabic notes, round labels, wall decals, 1:10 banners, no information at all. Never used for training or tuning.
+Authored separately to attack known weaknesses: misleading filenames, negated notes ("not a sticker"), Arabic notes, round labels, wall decals, 1:10 banners, no information at all. Never used for training or tuning. They are not independent real-world artwork: their files are drawn by the same renderer and shape vocabulary as the synthetic set.
 
 | Metric | Value |
 |---|---|
-| Top-1 | 87.5% |
+| Top-1 | 84.4% |
 | Top-2 | 100% |
 | Abstention rate | 12.5% |
 | Accuracy when not abstaining | 92.9% |
+| Wrong and not abstained | 2 |
 | Wrong and confident | 1 |
-| ECE | 0.088 |
+| ECE | 0.081 |
 | Keyword-only baseline | 53.1% |
 
-The confident wrong case is `stickers-final-window`: an A4 window poster whose filename says stickers and which came with no other instructions. The model says sticker at p = 0.9999. **The evidence gate flags it as thin**, and it is the sample used to demonstrate recovery. The other wrong, non-abstained case is `record-label-party`, an A1 poster for a record label's launch party, read as a label at p = 0.79 ("likely", not "confident"). Abstained cases: a round jar-lid label, a typo-named label file, a vinyl wall print and a bare poster PDF with no instructions.
+Misses:
+
+- `stickers-final-window`: an A4 window poster whose filename says stickers and which came with no other instructions. The model says sticker at p = 0.9998, **and the evidence gate flags it as thin**. It is the sample used to demonstrate recovery.
+- `record-label-party`: an A1 poster for a record label's launch party, read as a label at p = 0.76 ("likely", not "confident"). It is not flagged.
+- Abstained and wrong: `jar-lid-round-label`, `typo-poster-for-jars`, `vinyl-wall-print`. (`bare-pdf-poster` also abstained, though its top guess was right.)
+
+Two cases are marked `uncertain`: for them the right behaviour is to abstain or flag, not to answer confidently. Both, `stickers-final-window` and `no-info-circle`, are flagged as thin evidence; neither abstains. Their top-1 result is not credited as a success of the gate.
 
 ## Evidence gate
 
+A reading is flagged when the filename carries at least 35% of all positive evidence for the top intent, or when the job has at most one meaningful instruction: quantity, a width or height, media, or notes that mention something about the job ("thanks" does not count).
+
 | | Synthetic test | Hand-written |
 |---|---|---|
-| Share of confident calls flagged | 16.6% | 21.9% |
-| Confident and wrong | 8 | 1 |
-| … of which flagged | 4 | 1 |
-| Confident and right, flagged anyway | 69 of 543 | 3 of 23 |
+| Flagged, of all jobs | 16.0% | 21.9% |
+| Flagged, of confident calls | 11.4% (62 of 544) | 16.7% (4 of 24) |
+| Confident and wrong | 6 | 1 |
+| … of which flagged | 2 | 1 |
+| Confident and right, flagged anyway | 60 of 538 | 3 of 23 |
+
+The gate is advisory: it never changes the reading, it asks the operator to look. It catches only a third of the synthetic confident-and-wrong cases. Before R2, the filename share was computed from only the five contributions shown on screen, and 4 of 8 such cases were flagged. The corrected calculation catches fewer.
 
 ## Correction memory
 
-For each of the 37 wrong predictions in the test set, the evaluation simulates the operator correcting it, then measures:
+For each of the 33 wrong predictions in the test set, the evaluation simulates the operator correcting it, then measures:
 
 | Measure | Value |
 |---|---|
 | The corrected case is right afterwards | 100% |
-| Near-variants of the corrected case right, before the correction | 3.8% (185 variants) |
-| Near-variants right, after the correction | 96.8% |
-| Other test jobs right, before | 94.2% |
-| Other test jobs right, after | 94.2% (23,125 job–correction pairs) |
-| Other jobs whose top intent the memory changed | 0.1% |
+| Near-variants of the corrected case right, before the correction | 4.2% (165 variants) |
+| Near-variants right, after the correction | 96.4% |
+| Other test jobs right, before / after | 94.9% / 94.9% (20,625 correction–job pairs) |
+| Pairs where memory matched the other job at all | 31 |
+| Pairs where memory changed the other job's top intent | 0 |
+
+Each pair is one correction against one other job. Corrections are not accumulated across a session here, so this does not measure a session with many corrections.
 
 Near-variants are "the same customer sends a similar job": same intent, shape kind, notes, filename and media; new colours, size ±10%, quantity ×0.5–2 (`dataset/gen.ts` `variantOf`).
+
+When remembered corrections make the reading differ from the model's own, the evidence gate flags the job: "Read as X only because you corrected Y; the model alone reads Z." Similarity in feature space is not proof that two jobs share an intent.
 
 ## Reproduce
 
 ```bash
-npm run dataset   # regenerate dataset/cases.json (deterministic)
+npm run dataset   # regenerate dataset/cases.json (deterministic, 400 per intent)
 npm run train     # retrain src/model.json (deterministic, seed 20261114)
 npm run eval      # rewrite docs/evidence/inference-eval.json
 ```

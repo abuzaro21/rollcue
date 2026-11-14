@@ -90,7 +90,7 @@ test('wrong cut paths are returned: misnamed, filled, or on a job that is not cu
   assert.equal(misnamed.plan.decision.kind, 'return');
   const filled = await run({ format: 'pdf', shape: 'circle', wMm: 70, hMm: 70, opaqueBg: false, cutSpot: { name: 'CutContour', filled: true } }, sticker);
   assert.equal(check(filled.plan, 'cut'), 'fail');
-  const poster = await run({ format: 'pdf', shape: 'poster-full', wMm: 420, hMm: 594, opaqueBg: true, cutSpot: { name: 'CutContour' } }, intake({ filename: 'poster.pdf', qty: 2, notes: 'poster for the window' }));
+  const poster = await run({ format: 'pdf', shape: 'poster-full', wMm: 420, hMm: 594, opaqueBg: true, cutSpot: { name: 'CutContour' } }, intake({ filename: 'poster.pdf', qty: 2, notes: 'poster for the window' }), { intent: 'poster' }); // the cut rule, not the model: the retrained model abstains on this contradictory file
   assert.equal(poster.plan.intent, 'poster');
   assert.equal(check(poster.plan, 'cut'), 'fail');
   const good = await run({ format: 'pdf', shape: 'circle', wMm: 70, hMm: 70, opaqueBg: false, cutSpot: { name: 'CutContour' } }, sticker);
@@ -140,6 +140,57 @@ test('unsupported work (packaging, dielines) is stopped by policy, not read as t
   const over = plan(r.inspection, intake({ filename: 'box.pdf', qty: 500, notes: 'packaging carton with dieline' }), r.pred, { intent: 'sticker' });
   assert.equal(over.intent, 'sticker', 'the operator can still override');
   assert.notEqual(over.decision.kind, 'intent');
+});
+
+test('packaging labels are labels, not out-of-scope packaging (Codex R2-3)', async () => {
+  const i = intake({ filename: 'soap.pdf', qty: 2000, media: 'label_stock', notes: 'Packaging labels for the soap bars.' });
+  const r = await run({ format: 'pdf', shape: 'rect', wMm: 90, hMm: 50, opaqueBg: true }, i);
+  assert.notEqual(check(r.plan, 'scope'), 'fail');
+  assert.notEqual(r.plan.decision.headline, 'Outside what RollCue prepares');
+});
+
+test('courtesy text is not evidence; a height-only size is (Codex R2-4)', async () => {
+  const c = HANDSET.find((h) => h.id === 'no-info-circle')!;
+  const r = await run(c.file, intake({ filename: 'IMG_2231.png', qty: 1, notes: 'thanks' }));
+  assert.equal(r.plan.evidence.contextSignals, 1);
+  assert.equal(r.plan.evidence.thin, true);
+  const h = await run(c.file, intake({ filename: 'IMG_2231.png', qty: 1, reqH: 70 }));
+  assert.equal(h.plan.evidence.contextSignals, 2);
+  // Filename share is computed over every present contribution, not only the five shown.
+  assert.ok(r.pred.filenameShare >= 0 && r.pred.filenameShare <= 1);
+});
+
+test('a correction that overrides the model on another job is flagged for checking (Codex R2-2)', async () => {
+  const banner = await run({ format: 'pdf', shape: 'banner-bands', wMm: 2000, hMm: 500, opaqueBg: true }, intake({ filename: 'shop.pdf', qty: 1, media: 'pvc_banner', notes: 'banner for the shop' }));
+  assert.equal(banner.pred.top, 'banner');
+  // An operator corrected an identical-looking job to poster earlier in the session.
+  const mem = memoryOf([{ jobId: 'other', filename: 'other.pdf', intent: 'poster', x: banner.x }]);
+  const carried = predict(model, banner.x, mem);
+  assert.equal(carried.top, 'poster');
+  const p = plan(banner.inspection, intake({ filename: 'shop.pdf', qty: 1, media: 'pvc_banner', notes: 'banner for the shop' }), carried, {});
+  assert.equal(p.evidence.thin, true);
+  assert.ok(p.evidence.reasons.some((r) => r.includes('only because you corrected other.pdf') && r.includes('the model alone reads banner')));
+});
+
+test('correcting a banner does not turn a different-shaped poster into a banner (Codex R2-2 pair)', () => {
+  const cases = JSON.parse(readFileSync('dataset/cases.json', 'utf8')).cases as Array<{ id: string; intent: 'banner' | 'poster'; x: number[] }>;
+  const banner = cases.find((c) => c.id === 'banner-2203')!, poster = cases.find((c) => c.id === 'poster-1418')!;
+  assert.notDeepEqual(banner.x, poster.x, 'a raster without density keeps its pixel aspect ratio');
+  const mem = memoryOf([{ jobId: banner.id, filename: 'b.png', intent: 'banner', x: banner.x }]);
+  assert.equal(predict(model, poster.x, mem).top, predict(model, poster.x).top);
+});
+
+test('explanations say which way a value points (Codex R2-7)', async () => {
+  const neg = await hand('negated-sticker');
+  const all = [...neg.pred.forTop, ...neg.pred.againstTop, ...Object.values(neg.pred.forEach).flat()];
+  assert.ok(all.every((e) => !(e.value < 0 && /^(note|file)_/.test(e.feature)) || /rule out/.test(e.label)), 'a negated mention is never worded as a mention');
+  const z = (e: { feature: string; value: number }) => (e.value - model.mean[model.features.indexOf(e.feature)]) / model.std[model.features.indexOf(e.feature)];
+  assert.ok(all.every((e) => z(e) >= 0 || /less than usual|rule out/.test(e.label)), 'a below-average value is labelled as such');
+});
+
+test('the documented dataset command reproduces the committed dataset size (Codex R2-8)', () => {
+  const def = Number(/process\.argv\[2\] \?\? (\d+)/.exec(readFileSync('scripts/build-dataset.ts', 'utf8'))![1]);
+  assert.equal(JSON.parse(readFileSync('dataset/cases.json', 'utf8')).perIntent, def);
 });
 
 test('an unresolved check is never reported as "every check passes" (Codex R1-11)', async () => {

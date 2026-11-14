@@ -18,7 +18,7 @@ PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local and c
 | G2 Genuine workflow | Real intake, analysis, decision and output | **PASS** | `scripts/validate-artifacts.ts` → [evidence/artifact-validation.json](evidence/artifact-validation.json): 7/7 samples through the real service, released and checked independently |
 | G3 Non-chat | Primary operation with no conversational prompt | **PASS** | No free-text prompt in the main flow (`ui/src/main.tsx`, `ui/src/card.tsx`); e2e completes every flow by clicks ([evidence/e2e-local.log](evidence/e2e-local.log)) |
 | G4 Non-dashboard | Guided by decisions, not a wall of KPIs | **PASS** | One decision card per job ([WORKFLOW.md](WORKFLOW.md)). Codex R1 tried to prove it a dashboard or scripted flow and concluded it is not ([reviews/R1-concept-ux.md](reviews/R1-concept-ux.md)) |
-| G5 Intent inference | Real engine, varied inputs, held-out evaluation | **PASS** | [INFERENCE-EVALUATION.md](INFERENCE-EVALUATION.md), [evidence/inference-eval.json](evidence/inference-eval.json); CI fails if results drift |
+| G5 Intent inference | Real engine, varied inputs, held-out evaluation | **PASS** | [INFERENCE-EVALUATION.md](INFERENCE-EVALUATION.md), [evidence/inference-eval.json](evidence/inference-eval.json); CI fails if results drift. Codex R2 reproduced every figure and confirmed no label leakage; test-set overlap with training is now reported ([reviews/R2-inference-eval.md](reviews/R2-inference-eval.md)) |
 | G6 Proactive action | Useful action initiated automatically | **PASS** | Seeded and uploaded jobs are prepared and verified before the operator opens them (`api.test.ts` "first visit seeds jobs that RollCue has already prepared") |
 | G7 Human review | Approval gates consequential changes | **PASS** | [ACTION-SAFETY.md](ACTION-SAFETY.md); `api.test.ts` binding, idempotency, superseded, policy-changed, binding-mismatch |
 | G8 Wrong-guess recovery | Correct intent, invalidate proposals, continue safely | **PASS** | [WRONG-GUESS-RECOVERY.md](WRONG-GUESS-RECOVERY.md); e2e "wrong guess…" (desktop + mobile); `api.test.ts` |
@@ -60,7 +60,7 @@ PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local and c
 |---|---|---|---|
 | R0 | Independent architecture | done | [reviews/ARCH-B-codex.md](reviews/ARCH-B-codex.md) |
 | R1 | Product concept and UX (dashboard/scripted-flow attack) | done: 12 findings (6 major), all fixed with tests except doc-only R1-12 and screenshot-checked R1-1; fixes not re-reviewed until R7 | [reviews/R1-concept-ux.md](reviews/R1-concept-ux.md) |
-| R2 | Inference model and evaluation | open | |
+| R2 | Inference model and evaluation | done: 10 findings (4 major), all fixed; aspect-ratio feature bug fixed, dataset rebuilt, model retrained, every figure regenerated; fixes not re-reviewed until R7 | [reviews/R2-inference-eval.md](reviews/R2-inference-eval.md) |
 | R3 | Preflight correctness | open | |
 | R4 | Approval and execution | open | |
 | R5 | Wrong-guess recovery | open | |

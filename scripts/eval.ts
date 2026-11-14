@@ -2,13 +2,13 @@
 // writes docs/evidence/inference-eval.json and prints a summary. Usage: node scripts/eval.ts
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { FEATURE_NAMES, INTENTS, type Intent } from '../src/features.ts';
-import { memoryOf, predict, MEMORY, type ModelFile } from '../src/model.ts';
+import { memoryOf, predict, standardise, MEMORY, type ModelFile } from '../src/model.ts';
 import { genCase, makeFile, variantOf } from '../dataset/gen.ts';
 import { inspect } from '../src/inspect.ts';
 import { featurize } from '../src/features.ts';
-import { evidenceOf } from '../src/policy.ts';
+import { evidenceOf, outOfScope } from '../src/policy.ts';
 
-type Row = { x: number[]; intent: Intent; id: string; intake?: any; shape?: string; notes?: string; tags?: string[]; split?: string };
+type Row = { x: number[]; intent: Intent; id: string; intake?: any; shape?: string; notes?: string; tags?: string[]; split?: string; uncertain?: boolean };
 const model: ModelFile = JSON.parse(readFileSync('src/model.json', 'utf8'));
 const cases: Row[] = JSON.parse(readFileSync('dataset/cases.json', 'utf8')).cases;
 const hand: Row[] = existsSync('dataset/handset.json') ? JSON.parse(readFileSync('dataset/handset.json', 'utf8')).cases : [];
@@ -65,7 +65,7 @@ const slice = (pred: (c: Row) => boolean) => { const s = test.filter(pred); retu
 // memory. Then score (a) the corrected job itself, (b) 5 regenerated near-variants of it (same customer, similar job),
 // and (c) every other test case, before and after. (c) measures collateral damage.
 const wrong = test.filter((c) => predict(model, c.x).top !== c.intent);
-let fixed = 0, varBefore = 0, varAfter = 0, varN = 0, otherBefore = 0, otherAfter = 0, otherN = 0, otherTouched = 0;
+let fixed = 0, varBefore = 0, varAfter = 0, varN = 0, otherBefore = 0, otherAfter = 0, otherN = 0, otherMatched = 0, otherChanged = 0, otherHelped = 0, otherHarmed = 0;
 for (const w of wrong) {
   const mem = memoryOf([{ jobId: w.id, filename: 'x', intent: w.intent, x: w.x }]);
   fixed += +(predict(model, w.x, mem).top === w.intent);
@@ -79,10 +79,27 @@ for (const w of wrong) {
   }
   for (const c of test) {
     if (c === w) continue;
-    const p = predict(model, c.x, mem);
-    otherBefore += +(predict(model, c.x).top === c.intent); otherAfter += +(p.top === c.intent); otherN++;
-    if (p.memory.length) otherTouched++;
+    const p = predict(model, c.x, mem), p0 = predict(model, c.x);
+    otherBefore += +(p0.top === c.intent); otherAfter += +(p.top === c.intent); otherN++;
+    if (p.memory.length) otherMatched++;
+    if (p.top !== p0.top) { otherChanged++; if (p.top === c.intent) otherHelped++; else if (p0.top === c.intent) otherHarmed++; }
   }
+}
+
+/** Test jobs vs their nearest training job, by the memory kernel's similarity on standardised features (Codex R2-1). */
+function overlap() {
+  const tr = cases.filter((c) => c.split === 'train').map((c) => ({ z: standardise(model, c.x), key: c.x.join(','), intent: c.intent }));
+  const keys = new Map(tr.map((t) => [t.key, t.intent]));
+  let exact = 0, exactOtherIntent = 0;
+  const near: Row[] = [], novel: Row[] = [];
+  for (const c of test) {
+    const k = c.x.join(',');
+    if (keys.has(k)) { exact++; if (keys.get(k) !== c.intent) exactOtherIntent++; }
+    const z = standardise(model, c.x);
+    const best = Math.max(...tr.map((t) => Math.exp(-(t.z.reduce((s, v, j) => s + (v - z[j]) ** 2, 0) / z.length) / MEMORY.tau)));
+    (best >= MEMORY.nearDuplicate ? near : novel).push(c);
+  }
+  return { exactDuplicates: exact, exactDuplicatesWithOtherIntent: exactOtherIntent, nearDuplicates: near.length, nearDuplicateTop1: near.length ? metrics(near).top1 : null, novel: novel.length, novelTop1: metrics(novel).top1, novelAbstain: metrics(novel).abstainRate, novelWrongConfident: metrics(novel).wrongConfident };
 }
 
 /** Evidence gate: how often a confident call is flagged as resting on thin evidence, split by right and wrong. */
@@ -95,7 +112,7 @@ function gate(rows: Row[]) {
     confident++;
     if (p.top === c.intent) { rightConf++; rightConfFlagged += +ev.thin; } else { wrongConf++; wrongConfFlagged += +ev.thin; }
   }
-  return { flaggedRate: r3(flagged / rows.length), confident, wrongConfident: wrongConf, wrongConfidentFlagged: wrongConfFlagged, rightConfident: rightConf, rightConfidentFlagged: rightConfFlagged };
+  return { flaggedOfAllJobs: r3(flagged / rows.length), flaggedOfConfidentCalls: r3((wrongConfFlagged + rightConfFlagged) / Math.max(1, confident)), confident, wrongConfident: wrongConf, wrongConfidentFlagged: wrongConfFlagged, rightConfident: rightConf, rightConfidentFlagged: rightConfFlagged };
 }
 
 const out = {
@@ -103,12 +120,16 @@ const out = {
   syntheticTest: metrics(test),
   evidenceGate: { syntheticTest: gate(test), handset: hand.length ? gate(hand) : null },
   keywordBaseline: keywordBaseline(test),
+  overlapWithTraining: overlap(),
+  // Every test job is a supported intent, so any scope return here is a false rejection by policy (Codex R2-3).
+  scopeFalseReturns: { syntheticTest: test.filter((c) => outOfScope(c.intake)).length, handset: hand.filter((c) => outOfScope(c.intake)).length },
+  // Inference-time masking of feature groups on the trained model, not retraining without them.
   ablations: { noTextFeatures: metrics(test, blank(TEXT)).top1, noFilename: metrics(test, blank(FILE)).top1, noNotes: metrics(test, NO_NOTES).top1 },
   slices: {
     misleadingFilename: slice((c) => !!c.tags?.includes('misleading-filename')),
     conflictingNotes: slice((c) => !!c.tags?.includes('conflicting-notes')),
-    noSize: slice((c) => !!c.tags?.includes('no-size')),
-    noDensity: slice((c) => !!c.tags?.includes('no-density')),
+    noRequestedSize: slice((c) => !!c.tags?.includes('no-size')),
+    noEmbeddedDensity: slice((c) => !!c.tags?.includes('no-density')),
     opaqueSticker: slice((c) => !!c.tags?.includes('opaque-sticker')),
     transparentPoster: slice((c) => !!c.tags?.includes('transparent-poster')),
     scaledArtwork: slice((c) => !!c.tags?.some((t) => t.startsWith('scaled'))),
@@ -123,17 +144,20 @@ const out = {
     correctedCaseNowRight: r3(fixed / Math.max(1, wrong.length)),
     nearVariants: varN, nearVariantTop1Before: r3(varBefore / Math.max(1, varN)), nearVariantTop1After: r3(varAfter / Math.max(1, varN)),
     otherPairs: otherN, othersTop1Before: r3(otherBefore / Math.max(1, otherN)), othersTop1After: r3(otherAfter / Math.max(1, otherN)),
-    othersTouchedByMemory: r3(otherTouched / Math.max(1, otherN)),
+    otherPairsMatchedByMemory: otherMatched, otherPairsTopChanged: otherChanged, otherPairsHelped: otherHelped, otherPairsHarmed: otherHarmed,
   },
   handset: hand.length ? {
     ...metrics(hand), keywordBaseline: keywordBaseline(hand),
-    cases: hand.map((c) => { const p = predict(model, c.x); return { id: c.id, truth: c.intent, top: p.top, pTop: p.pTop, band: p.band, abstain: p.abstain, ok: p.top === c.intent }; }),
+    cases: hand.map((c) => { const p = predict(model, c.x); return { id: c.id, truth: c.intent, top: p.top, pTop: p.pTop, band: p.band, abstain: p.abstain, thin: evidenceOf(p, c.intake).thin, uncertain: !!c.uncertain, ok: p.top === c.intent }; }),
+    // Cases where the right behaviour is to abstain or flag thin evidence (Codex R2-10): credit only for that.
+    uncertainHandled: hand.filter((c) => c.uncertain).map((c) => { const p = predict(model, c.x); return { id: c.id, abstained: p.abstain, flaggedThin: evidenceOf(p, c.intake).thin }; }),
   } : null,
 };
 writeFileSync('docs/evidence/inference-eval.json', JSON.stringify(out, null, 1));
 const s = out.syntheticTest;
 console.log(`synthetic test n=${s.n} top1=${s.top1} top2=${s.top2} F1=${s.macroF1} ECE=${s.ece} brier=${s.brier} abstain=${s.abstainRate} acceptedAcc=${s.acceptedAccuracy} wrongConfident=${s.wrongConfident}`);
 console.log('keyword baseline', out.keywordBaseline, 'ablations', JSON.stringify(out.ablations));
+console.log('overlap', JSON.stringify(out.overlapWithTraining), 'scope false returns', JSON.stringify(out.scopeFalseReturns));
 console.log('slices', JSON.stringify(out.slices));
 console.log('correction', JSON.stringify(out.correction));
 console.log('evidence gate', JSON.stringify(out.evidenceGate));
@@ -141,4 +165,5 @@ if (out.handset) {
   const h = out.handset;
   console.log(`handset n=${h.n} top1=${h.top1} top2=${h.top2} ECE=${h.ece} abstain=${h.abstainRate} acceptedAcc=${h.acceptedAccuracy} wrongConfident=${h.wrongConfident} kwBaseline=${h.keywordBaseline}`);
   for (const c of h.cases.filter((c) => !c.ok)) console.log('  miss', JSON.stringify(c));
+  console.log('  uncertain', JSON.stringify(h.uncertainHandled));
 }

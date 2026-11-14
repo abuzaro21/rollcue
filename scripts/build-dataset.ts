@@ -1,11 +1,11 @@
 // Builds dataset/cases.json: every synthetic case is generated as a real file and run through the same inspection code
-// the live service uses. Usage: node scripts/build-dataset.ts [perIntent=320]
+// the live service uses. Usage: node scripts/build-dataset.ts [perIntent=400]
 import { writeFileSync } from 'node:fs';
 import { genCase, makeFile, splitOf } from '../dataset/gen.ts';
 import { inspect } from '../src/inspect.ts';
 import { featurize, INTENTS } from '../src/features.ts';
 
-const per = Number(process.argv[2] ?? 320);
+const per = Number(process.argv[2] ?? 400);
 const rows: Array<Record<string, unknown> & { split: string }> = [];
 const t0 = performance.now();
 let n = 0;
@@ -31,7 +31,7 @@ const hand = [];
 for (const [i, c] of HANDSET.entries()) {
   const intake = handIntake(c);
   const { inspection } = await inspect(await makeFile({ ...c.file, seed: 900000 + i }));
-  hand.push({ id: c.id, intent: c.intent, why: c.why, intake, x: featurize(inspection, intake) });
+  hand.push({ id: c.id, intent: c.intent, why: c.why, uncertain: c.uncertain ?? false, intake, x: featurize(inspection, intake) });
 }
 writeFileSync('dataset/handset.json', JSON.stringify({ source: 'dataset/handset.ts', cases: hand }));
 console.log(`handset ${hand.length}`);

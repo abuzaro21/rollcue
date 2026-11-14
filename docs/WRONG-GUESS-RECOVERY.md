@@ -20,16 +20,17 @@ Steps 1–8 are an end-to-end browser test: `e2e/rollcue.spec.ts` "wrong guess: 
 
 ## Why the memory does not spread
 
-The deployed model is frozen. A correction does not change its weights. It adds a remembered example that votes only for jobs that look like it (similarity = exp(−mean squared difference of the standardised features ÷ τ), with τ = 0.08). Below a similarity of 0.05 it has no effect. At 0.9 or above, the job is a near-duplicate of one the operator already answered, and the operator's answer wins.
+The deployed model is frozen. A correction does not change its weights. It adds a remembered example that votes only for jobs that look like it (similarity = exp(−mean squared difference of the standardised features ÷ τ), with τ = 0.08). Below a similarity of 0.05 it has no effect. At 0.9 or above, the job is a near-duplicate of one the operator already answered, and the operator's answer wins. But it is flagged "Check this one", naming the correction, because looking alike is not the same as being the same job (Codex R2-2).
 
 Measured over every wrong prediction in the held-out set:
 
 | | Before correction | After correction |
 |---|---|---|
 | The corrected job | wrong | right (100%) |
-| Near-variants of it (185) | 3.8% right | 96.8% right |
-| All other jobs (23,125 pairs) | 94.2% right | 94.2% right |
-| Other jobs whose top intent changed | | 0.1% |
+| Near-variants of it (165) | 4.2% right | 96.4% right |
+| All other jobs (20,625 correction–job pairs) | 94.9% right | 94.9% right |
+| Other jobs the memory matched at all | | 31 pairs |
+| Other jobs whose top intent changed | | 0 pairs |
 
 The first design was a weight-delta adapter. It hurt unrelated jobs (98.3% → 90.3% on an earlier version of the benchmark) and was replaced. See [ARCHITECTURE-DECISIONS.md](ARCHITECTURE-DECISIONS.md) D4.
 

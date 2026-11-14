@@ -72,6 +72,13 @@ export function softmax(l: number[], T = 1): number[] {
 
 export type Evidence = { feature: string; label: string; value: number; weight: number };
 
+/** Wording that matches the direction of the value (Codex R2-7): a negated mention, or a value below the training mean. */
+function labelOf(m: ModelFile, j: number, x: number, z: number): string {
+  const base = FEATURES[j].label;
+  if (x < 0 && /^(note|file)_/.test(m.features[j])) return base.replace('Notes mention', 'Notes rule out').replace('Filename suggests', 'Filename rules out');
+  return z < 0 ? `${base} (less than usual)` : base;
+}
+
 export type Prediction = {
   modelVersion: string;
   memoryVersion: string;
@@ -91,6 +98,8 @@ export type Prediction = {
   againstTop: Evidence[];
   /** For each other intent, the features that pull toward it most (used by "Not this?"). */
   forEach: Record<Intent, Evidence[]>;
+  /** Share of all positive evidence for the top intent that comes from the filename (every present feature, not just the five shown). */
+  filenameShare: number;
 };
 
 export function predict(m: ModelFile, x: number[], mem?: Memory): Prediction {
@@ -102,15 +111,18 @@ export function predict(m: ModelFile, x: number[], mem?: Memory): Prediction {
   const order = p.map((v, k) => [v, k] as const).sort((u, v) => v[0] - u[0]).map(([, k]) => k);
   const [t, s] = order;
   const w = (k: number, j: number) => m.W[k][j];
-  const diff = z.map((zj, j) => ({ feature: m.features[j], label: FEATURES[j].label, value: x[j], weight: round((w(t, j) - w(s, j)) * zj) }));
+  const diff = z.map((zj, j) => ({ feature: m.features[j], label: labelOf(m, j, x[j], zj), value: x[j], weight: round((w(t, j) - w(s, j)) * zj) }));
   // Only facts present in this job are shown as evidence; an absent feature still moves a linear model, but naming it
   // ("Media: Vinyl" when no media was given) would mislead the operator.
   const strongest = (arr: Evidence[], sign: 1 | -1) => arr.filter((e) => e.value !== 0 && e.weight * sign > 0.05).sort((u, v) => sign * (v.weight - u.weight)).slice(0, 5);
   const avg = (j: number) => m.classes.reduce((acc, _, k) => acc + w(k, j), 0) / m.classes.length;
   const forEach = Object.fromEntries(m.classes.map((c, k) => [c, strongest(z.map((zj, j) => ({
-    feature: m.features[j], label: FEATURES[j].label, value: x[j], weight: round((w(k, j) - avg(j)) * zj),
+    feature: m.features[j], label: labelOf(m, j, x[j], zj), value: x[j], weight: round((w(k, j) - avg(j)) * zj),
   })), 1).slice(0, 3)])) as Record<Intent, Evidence[]>;
   const pTop = p[t], margin = p[t] - p[s];
+  const present = diff.filter((e) => e.value !== 0 && e.weight > 0);
+  const posAll = present.reduce((a, e) => a + e.weight, 0);
+  const fileAll = present.filter((e) => e.feature.startsWith('file_')).reduce((a, e) => a + e.weight, 0);
   return {
     modelVersion: m.version,
     memoryVersion: mem?.version ?? 'none',
@@ -126,6 +138,7 @@ export function predict(m: ModelFile, x: number[], mem?: Memory): Prediction {
     forTop: strongest(diff, 1),
     againstTop: strongest(diff, -1),
     forEach,
+    filenameShare: posAll > 0 ? round(fileAll / posAll) : 0,
   };
 }
 
