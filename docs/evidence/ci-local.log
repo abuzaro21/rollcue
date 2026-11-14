@@ -1,0 +1,35 @@
+RollCue clean-clone CI — commit e9b67e913e60ab008eb0b64975b9006e10c07b5f — 2026-11-14T00:44:12Z
+note: uncommitted changes exist and are NOT part of this run
+Unable to find image 'node:24.13.0' locally
+24.13.0: Pulling from library/node
+10c7c01ed7d9: Pulling fs layer
+6dc8224e38b6: Pulling fs layer
+6bc9f599b3ef: Pulling fs layer
+89edcaae7ec4: Pulling fs layer
+7dabaea17966: Pulling fs layer
+bbceb0035429: Pulling fs layer
+93f9c443d677: Pulling fs layer
+11ee6189c0a7: Pulling fs layer
+10c7c01ed7d9: Download complete
+6bc9f599b3ef: Download complete
+6bc9f599b3ef: Pull complete
+89edcaae7ec4: Download complete
+93f9c443d677: Download complete
+bbceb0035429: Download complete
+7dabaea17966: Download complete
+89edcaae7ec4: Pull complete
+35b3649026ba: Download complete
+24d146f0f3e3: Download complete
+bbceb0035429: Pull complete
+11ee6189c0a7: Download complete
+6dc8224e38b6: Download complete
+6dc8224e38b6: Pull complete
+93f9c443d677: Pull complete
+11ee6189c0a7: Pull complete
+7dabaea17966: Pull complete
+10c7c01ed7d9: Pull complete
+Digest: sha256:1de022d8459f896fff2e7b865823699dc7a8d5567507e8b87b14a7442e07f206
+Status: Downloaded newer image for node:24.13.0
+debconf: delaying package configuration, since apt-utils is not installed
+fatal: repository '/src.git' does not exist
+bash: scripts/ci.sh: No such file or directory

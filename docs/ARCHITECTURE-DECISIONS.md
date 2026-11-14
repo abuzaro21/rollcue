@@ -46,13 +46,18 @@ Both proposed the same model class. Final design:
 
 ## D4. Learning from corrections — disagreement resolved
 
-Codex: keep the deployed model frozen; the correction becomes a hard constraint plus saved labelled evidence. Claude: a session-scoped online update. Resolution, which keeps both safety properties:
-1. The global model is frozen and versioned (`modelVersion`).
+Codex: keep the deployed model frozen; the correction becomes a hard constraint plus saved labelled evidence. Claude: a session-scoped online update. Resolution as built, which keeps both safety properties:
+1. The global model is frozen and versioned (`modelVersion`). Corrections never change its weights.
 2. A correction is a **hard constraint** on that job. The operator's intent replaces the model's.
-3. The correction also trains a **session adapter**: a bounded weight delta, max-norm capped, scoped to one session, inspectable and resettable. It is only ever added to the frozen weights. Its version is part of every approval binding.
-4. Corrections are stored as labelled evidence for a future, separately evaluated model version.
+3. The correction is also stored as **session correction memory**: the corrected job's feature vector and intent. A new job's prediction is mixed with a kernel vote from remembered corrections (cosine similarity, temperature τ = 0.08, strength β = 6, ignored below similarity 0.05). A near-duplicate (similarity ≥ 0.9) overrides the model, because the operator already answered that exact question. The memory is scoped to one session. The operator can see it ("Remembers N corrections") and clear it ("Forget them"). Its version (`memoryVersion`) is part of every approval binding.
+4. The first implementation was a bounded weight-delta adapter, as planned. It was replaced by the kernel memory because it hurt unrelated jobs: accuracy on them fell from 98.3% to 90.3% after corrections. That was measured on an earlier, easier version of the synthetic benchmark, before the generator was widened. A weight change shifts every job's score; the kernel memory changes only jobs that resemble a correction.
+5. Corrections are stored as labelled evidence for a future, separately evaluated model version.
 
-Eval measures carry-over (do near-variants of a corrected job now come out right?) and collateral damage (accuracy change on unrelated jobs).
+Measured on the held-out set ([INFERENCE-EVALUATION.md](INFERENCE-EVALUATION.md)): the corrected case is right afterwards (1.0), near-variants are right 96.8% of the time, accuracy on other jobs is unchanged (94.2% before and after), and memory changes the top intent of 0.1% of unrelated jobs.
+
+**Evidence gate.** A confident reading is flagged "thin evidence" when the filename carries at least 35% of the decision or at most one context signal supports it. The flag does not change the reading; it tells the operator to look before approving. On the hand-written set it flags the one confident wrong case.
+
+**Explanations** list only features that are present in the job (value ≠ 0), so the evidence never cites, for example, a media type the customer did not give.
 
 ## D5. Cut contours — disagreement resolved
 
@@ -67,7 +72,7 @@ Codex: never invent an irregular cut path from a silhouette. Claude: deriving th
 Inference, proposal, preparation, approval, execution and verification are separate states.
 - Each job carries a `revision`. Any source, parameter or intent change increments it and supersedes every open proposal in the same transaction.
 - A worker records the revision it started from. If the job has moved on, it cannot publish.
-- An approval must echo `proposalId` and `artifactSha256`. The server recomputes `bindingHash = sha256(sourceSha256, action, canonical params, artifactSha256, policyVersion, modelVersion, adapterVersion, revision)` from its own rows. Any mismatch, or a superseded proposal, returns 409.
+- An approval must echo `proposalId` and `artifactSha256`. The server recomputes `bindingHash = sha256(sourceSha256, action, canonical params, artifactSha256, policyVersion, modelVersion, memoryVersion, revision)` from its own rows. Any mismatch, or a superseded proposal, returns 409.
 - Execution is idempotent. A release is not "done" until verification passes; a failure is recorded as failed and nothing is claimed.
 - Nothing prints. Nothing is sent externally. The uploaded original is never modified.
 
