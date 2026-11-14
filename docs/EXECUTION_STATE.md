@@ -27,7 +27,7 @@ PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local and c
 | G11 Security | Uploads, sessions, artifact access protected | **PASS** | [SECURITY.md](SECURITY.md); `api.test.ts` isolation, CSRF, bad input; `preflight.test.ts` no process/network; `api-r6.test.ts` (Codex R6: sessions, admission, storage, decompression, image budget, hooks, worker, retention); live checks pending deployment |
 | G12 Durability | Refresh and restart preserve state | **PASS (local)**; live restart open | `durability.test.ts`; e2e "refresh keeps the work…" |
 | G13 Browser quality | Desktop and mobile pass | **PASS** | Playwright 40/40 (desktop 1440×900 + Pixel 7), [evidence/e2e-local.log](evidence/e2e-local.log), re-run after the R7 fixes; legacy return notice shown before approval (Codex R7-8); preview-gated approval and post-409 recovery tested (Codex R4-5, R4-8); R1 UX fixes (job-switch race, connection states, mobile approve order) are tested |
-| G14 Clean clone | Build, tests, audit, Docker | **PASS** (local Docker; GitHub Actions not run yet) | `0cbfe48`: typecheck, 87/87 unit, eval, 7/7 artifacts with Ghostscript, 40/40 browser, audit 0 vulnerabilities, Docker build and smoke, "ALL STAGES PASSED" in [evidence/ci-local.log](evidence/ci-local.log) |
+| G14 Clean clone | Build, tests, audit, Docker | **PASS** (local Docker; GitHub Actions blocked by account billing, see CI) | `0cbfe48`: typecheck, 87/87 unit, eval, 7/7 artifacts with Ghostscript, 40/40 browser, audit 0 vulnerabilities, Docker build and smoke, "ALL STAGES PASSED" in [evidence/ci-local.log](evidence/ci-local.log) |
 | G15 Live demo | Core workflows on the public URL | OPEN | Needs an isolated free workspace from the owner ([DEPLOY.md](DEPLOY.md)) |
 | G16 Film | ~90 s, rendered and checked | OPEN | |
 | G17 Submission | Docs and submission content complete | OPEN | [SUBMISSION.md](SUBMISSION.md) |
@@ -69,7 +69,7 @@ PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local and c
 
 ## CI
 
-- GitHub Actions workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `scripts/ci.sh`. Status: repository not created yet.
+- GitHub Actions workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `scripts/ci.sh`. Status: **blocked, not green.** The first run ([43617198726](https://github.com/abuzaro21/rollcue/actions/runs/43617198726), push of `e5ad538`, 2026-11-14) was not started: GitHub reported "recent account payments have failed or your spending limit needs to be increased". No paid runner or billing change will be made; clean-clone local CI stands in for it.
 - Clean-clone local CI: `scripts/ci-local.sh` clones the committed HEAD into a fresh `node:24.13.0` Linux container with Ghostscript, runs `scripts/ci.sh`, then builds and smoke-tests the Docker image on the host.
 
 ## Owner actions

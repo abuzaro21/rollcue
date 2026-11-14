@@ -26,7 +26,7 @@ DOO Builders League, challenge **"Beyond the Chatbot"**: what replaces the dashb
 | Item | Status |
 |---|---|
 | Public repository, MIT licence, history scanned | open |
-| CI green on GitHub Actions, or clean-clone local CI log if Actions is blocked | open |
+| CI green on GitHub Actions, or clean-clone local CI log if Actions is blocked | Actions blocked by account billing (run 43617198726, not started); clean-clone log `docs/evidence/ci-local.log` on `0cbfe48`, ALL STAGES PASSED |
 | Live demo verified against the public URL | open |
 | Film: about 90 s, 1920×1080, 30 fps, H.264/AAC, narration, burned-in captions | open |
 | Release v1.0.0 with film MP4 and SRT attached | open |
