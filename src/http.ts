@@ -107,6 +107,11 @@ export function createApp(o: AppOpts) {
       return serveStatic(res, p);
     }
     const ip = clientIp(req, o.trustProxyHops);
+    if (process.env.RC_DEBUG_IP === '1') { // TEMPORARY diagnostic of the proxy chain; addresses are hashed
+      const h = async (s: string | undefined) => (s ? (await import('node:crypto')).createHash('sha256').update(s).digest('hex').slice(0, 8) : '-');
+      const xff = String(req.headers['x-forwarded-for'] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+      console.log('[ipdebug]', JSON.stringify({ xff: await Promise.all(xff.map(h)), sock: await h(req.socket.remoteAddress), cf: await h(req.headers['cf-connecting-ip'] as string), tci: await h(req.headers['true-client-ip'] as string), key: await h(ip) }));
+    }
     if (!general.take(ip)) throw new HttpError(429, 'rate-limited', 'Too many requests. Wait a moment.');
     const mutating = m !== 'GET' && m !== 'HEAD';
     if (mutating && req.headers['x-rollcue'] !== '1') throw new HttpError(403, 'csrf', 'Missing request header.');
