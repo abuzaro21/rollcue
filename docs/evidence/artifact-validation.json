@@ -1,0 +1,89 @@
+{
+  "ghostscript": false,
+  "samples": [
+    {
+      "sample": "market-stickers",
+      "intent": "sticker",
+      "decision": "release",
+      "cut": "contour",
+      "pages": 1,
+      "sha256": "c85164abee2d665d",
+      "verifiedChecks": 6,
+      "plates": null,
+      "pass": true,
+      "fails": []
+    },
+    {
+      "sample": "stickers-final",
+      "intent": "sticker",
+      "decision": "release",
+      "cut": "contour",
+      "pages": 1,
+      "sha256": "82039547a8460f04",
+      "verifiedChecks": 6,
+      "plates": null,
+      "pass": true,
+      "fails": []
+    },
+    {
+      "sample": "honey-labels",
+      "intent": "label",
+      "decision": "release",
+      "cut": "keep",
+      "pages": 1,
+      "sha256": "19962611fb15308a",
+      "verifiedChecks": 6,
+      "plates": null,
+      "pass": true,
+      "fails": []
+    },
+    {
+      "sample": "soft-poster",
+      "intent": "poster",
+      "decision": "return",
+      "cut": "none",
+      "pages": 1,
+      "sha256": "283b14740ebe237f",
+      "verifiedChecks": 3,
+      "plates": null,
+      "pass": true,
+      "fails": []
+    },
+    {
+      "sample": "shop-banner",
+      "intent": "banner",
+      "decision": "release",
+      "cut": "none",
+      "pages": 1,
+      "sha256": "5ec1dbb5263f5d22",
+      "verifiedChecks": 5,
+      "plates": null,
+      "pass": true,
+      "fails": []
+    },
+    {
+      "sample": "jam-labels-misnamed",
+      "intent": "label",
+      "decision": "release",
+      "cut": "rect",
+      "pages": 1,
+      "sha256": "03590a2c97585147",
+      "verifiedChecks": 6,
+      "plates": null,
+      "pass": true,
+      "fails": []
+    },
+    {
+      "sample": "misnamed-cut",
+      "intent": "sticker",
+      "decision": "return",
+      "cut": "none",
+      "pages": 1,
+      "sha256": "6bc36567bacd28a1",
+      "verifiedChecks": 3,
+      "plates": null,
+      "pass": true,
+      "fails": []
+    }
+  ]
+}

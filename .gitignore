@@ -7,6 +7,7 @@ film/out/
 film/capture/
 film/tts/
 *.log
+!docs/evidence/*.log
 .env
 .env.*
 data/

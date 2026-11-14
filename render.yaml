@@ -1,0 +1,23 @@
+# Render Blueprint: one free web service (Docker) and one free Postgres, in their own isolated workspace.
+# Free Postgres expires 30 days after creation; record the date in docs/DEPLOY.md.
+services:
+  - type: web
+    name: rollcue
+    runtime: docker
+    plan: free
+    autoDeploy: false
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY_HOPS
+        value: "3"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rollcue-db
+          property: connectionString
+databases:
+  - name: rollcue-db
+    plan: free
+    databaseName: rollcue
+    user: rollcue

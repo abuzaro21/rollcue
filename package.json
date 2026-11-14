@@ -18,7 +18,9 @@
     "train": "node --disable-warning=ExperimentalWarning scripts/train.ts",
     "eval": "node --disable-warning=ExperimentalWarning scripts/eval.ts",
     "test:e2e": "playwright test",
-    "samples": "node --disable-warning=ExperimentalWarning scripts/make-samples.ts"
+    "samples": "node --disable-warning=ExperimentalWarning scripts/make-samples.ts",
+    "validate": "node --disable-warning=ExperimentalWarning scripts/validate-artifacts.ts",
+    "ci": "bash scripts/ci.sh"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.16",

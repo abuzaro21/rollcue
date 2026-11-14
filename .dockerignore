@@ -1,0 +1,13 @@
+node_modules
+public
+data
+.scratch
+.git
+test-results
+playwright-report
+film
+docs
+dataset/cases.json
+*.log
+.env
+.env.*
