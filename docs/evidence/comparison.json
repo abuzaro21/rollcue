@@ -1,0 +1,53 @@
+{
+  "method": "Playwright drives each surface by the shortest correct path for the same sample job on the same backend, in a fresh session. Clicks, form fields and screen changes are counted as the script performs them. Time includes server work. Legacy is a representative multi-tab preflight built for this comparison, not a real product.",
+  "generatedAt": "2026-11-14",
+  "results": {
+    "market-stickers": {
+      "rollcue": {
+        "clicks": 2,
+        "fields": 0,
+        "screens": 2,
+        "decisions": [
+          "approve prepared file"
+        ],
+        "ms": 2116
+      },
+      "legacy": {
+        "clicks": 9,
+        "fields": 3,
+        "screens": 5,
+        "decisions": [
+          "choose product type: Die-cut stickers",
+          "read preflight table",
+          "choose cut method: contour",
+          "enter offset 2 mm",
+          "approve output"
+        ],
+        "ms": 1500
+      }
+    },
+    "stickers-final": {
+      "rollcue": {
+        "clicks": 4,
+        "fields": 0,
+        "screens": 2,
+        "decisions": [
+          "correct intent → Poster",
+          "approve prepared file"
+        ],
+        "ms": 3140
+      },
+      "legacy": {
+        "clicks": 7,
+        "fields": 1,
+        "screens": 4,
+        "decisions": [
+          "choose product type: Poster",
+          "read preflight table",
+          "approve output"
+        ],
+        "ms": 1365
+      }
+    }
+  }
+}

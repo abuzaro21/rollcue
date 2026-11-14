@@ -97,7 +97,8 @@ function App() {
               <span className="qdot" aria-hidden /><span className="qname">{j.filename}</span>
             </button>
           ))}
-          <button type="button" className="qadd" onClick={() => setAdding(true)} aria-label="Add a job">+ Job</button>
+          <button type="button" className="qadd" onClick={() => setAdding(true)}>+ Upload</button>
+          <button type="button" className="qadd sample" onClick={() => setAdding(true)}>Try a sample job</button>
         </nav>
         <div className="top-right">
           {correctionText && (
@@ -132,7 +133,7 @@ function App() {
           onSample={(id) => { setAdding(false); void run(async () => { const r = await api.sample(id); counter.screen(); setCurrent(r.id); }); }}
           onUpload={(file, intake) => { setAdding(false); void run(async () => { const r = await api.upload(file, intake); counter.screen(); setCurrent(r.id); }); }} />
       )}
-      {session?.testHooks && job?.proposal?.status === 'prepared' && (
+      {session?.testHooks && location.hash === '#hooks' && job?.proposal?.status === 'prepared' && (
         <button type="button" className="test-hook" onClick={() => run(async () => { await api.failNext(); }, 'Next release will fail (test hook).')}>Fail next release</button>
       )}
       <div className={`toast ${toast?.tone ?? ''}`} role="status" aria-live="polite">{toast?.text}</div>
@@ -145,7 +146,7 @@ function Arrival({ session, onPick, onSample }: { session: Session | null; onPic
     <section className="arrival">
       <h1>The next decision, not another dashboard.</h1>
       <p>RollCue reads a print job, works out what it is, prepares the production file, and asks you one question at a time.</p>
-      <button type="button" className="primary" onClick={onPick}>Add a print file</button>
+      <button type="button" className="primary" onClick={onPick}>Upload a print file</button>
       {session && <ul className="samples">{session.samples.map((s) => <li key={s.id}><button type="button" className="option" onClick={() => onSample(s.id)}><span className="option-label">{s.title}</span><span className="option-detail">{s.story}</span></button></li>)}</ul>}
     </section>
   );
@@ -184,7 +185,7 @@ function AddJob({ session, close, onSample, onUpload }: { session: Session; clos
         </div>
         <button type="submit" className="primary" disabled={!file}>Let RollCue read it</button>
       </form>
-      <h3>Or try a sample job</h3>
+      <h3 id="samples">Try a sample job</h3>
       <ul className="samples">{session.samples.map((s) => <li key={s.id}><button type="button" className="option" onClick={() => onSample(s.id)}><span className="option-label">{s.title}</span><span className="option-detail">{s.story}</span></button></li>)}</ul>
     </dialog>
   );
