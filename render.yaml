@@ -21,3 +21,4 @@ databases:
     plan: free
     databaseName: rollcue
     user: rollcue
+    ipAllowList: [] # internal connections only; the web service reaches it over Render's private network
