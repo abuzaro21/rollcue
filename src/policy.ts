@@ -4,9 +4,9 @@
 import { INTENT_LABEL, effectivePpi, targetSize, textGroups, type Intake, type Intent } from './features.ts';
 import type { Inspection } from './inspect.ts';
 import type { Prediction } from './model.ts';
-import { rollLayout, DEFAULT_ROLL, type Layout, type RollSettings } from './layout.ts';
+import { rollLayout, cropMarkGeometry, DEFAULT_ROLL, type Layout, type RollSettings } from './layout.ts';
 
-export const POLICY_VERSION = 'rc-policy-3';
+export const POLICY_VERSION = 'rc-policy-4';
 
 /** Work this shop does not prepare on roll media. The model only knows four intents, so this is a hard boundary in policy, not a guess. */
 // "Packaging labels" and "packaging stickers" are labels and stickers, not packaging manufacture (Codex R2-3).
@@ -19,6 +19,9 @@ export const PPI = {
 export const ASPECT_TOLERANCE = 0.02;
 export const DEFAULT_OFFSET = { sticker: 2, label: 1.5 } as const;
 export const GAP_MM: Record<Intent, number> = { sticker: 4, label: 3, poster: 10, banner: 20 };
+export const TRIM_MARGIN_MM = 15; // page margin around posters and banners, holding bleed and crop marks
+export const FILL_BLEED_MM = 3; // bleed kept from art that a fill crops anyway
+export const MAX_BLEED_MM = 5;
 
 export type Params = {
   intent?: Intent; // operator correction; overrides the model
@@ -41,6 +44,7 @@ export type BuildPlan = {
   cut: 'contour' | 'rect' | 'keep' | 'none';
   targetW: number; targetH: number;
   marginMm: number;
+  bleedMm: number; // art kept beyond the trim and declared as the BleedBox
   offsetMm: number;
   radiusMm: number;
   cropMarks: boolean;
@@ -140,7 +144,9 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
       decision: { kind: 'size', headline: 'What size should this print?', found: `The image is ${px.w} × ${px.h} px with no size information, and the job does not give one.`, why: 'Size decides resolution, cut geometry and how much media the job uses.', options: opts },
     };
   }
-  add('size', 'Finished size', 'pass', `${size(target.w, target.h)} (${target.source})`);
+  // A raster's density is metadata, not an order: the 5 m cap applies to the size that would be printed (Codex R3-14).
+  if (Math.max(target.w, target.h) > PARAM_LIMITS.target[1]) add('size', 'Finished size', 'fail', `${size(target.w, target.h)} (${target.source}) is larger than the 5 m RollCue prepares.`);
+  else add('size', 'Finished size', 'pass', `${size(target.w, target.h)} (${target.source})`);
 
   // --- geometry & resolution ---
   const docAspect = ins.widthMm && ins.heightMm ? ins.widthMm / ins.heightMm : ins.pixels ? ins.pixels.w / ins.pixels.h : null;
@@ -150,11 +156,13 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
   else add('aspect', 'Proportions', 'pass', 'Artwork and requested size have the same proportions.');
   const scale = ins.widthMm ? target.w / ins.widthMm : null;
   if (scale && Math.abs(scale - 1) > 0.005) add('scale', 'Scale', 'warn', `Artwork is drawn at ${Math.round(100 / scale)}% of the finished size; it will be scaled ${scale.toFixed(scale > 5 ? 0 : 2)}×.`);
-  const ppi = effectivePpi(ins, target);
+  const ppi = effectivePpi(ins, target, fit);
   const floor = PPI[intent];
   if (ppi === null) add('resolution', 'Resolution at size', ins.imageCount === 0 ? 'pass' : 'unknown', ins.imageCount === 0 ? 'Vector artwork; no raster images.' : 'An image is placed with a transform that cannot be resolved.');
   else add('resolution', 'Resolution at size', ppi < floor.fail ? 'fail' : ppi < floor.warn ? 'warn' : 'pass', `${ppi} ppi at ${size(target.w, target.h)} (floor ${floor.fail}, comfortable ${floor.warn}).`);
-  if (ins.pages > 1) add('pages', 'Pages', 'warn', `${ins.pages} pages; only page 1 is prepared.`);
+  // Releasing page 1 of a multi-design order would silently drop the rest (Codex R3-12).
+  if (ins.pages > 1) add('pages', 'Pages', 'fail', `The PDF has ${ins.pages} pages; RollCue prepares one page per job and cannot choose which one is wanted.`);
+  if (ins.printableAnnots) add('annotations', 'Annotations', 'fail', `Page 1 has ${ins.printableAnnots} printable annotation${ins.printableAnnots === 1 ? '' : 's'} or form field${ins.printableAnnots === 1 ? '' : 's'}; the production file would lose ${ins.printableAnnots === 1 ? 'it' : 'them'}.`); // Codex R3-8
   if (ins.rotation) add('rotation', 'Page rotation', 'fail', `Page 1 is rotated ${ins.rotation}°; RollCue does not prepare rotated pages yet.`);
 
   // --- cut ---
@@ -164,23 +172,35 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
   let cut: BuildPlan['cut'] = 'none';
   if (intent === 'sticker' || intent === 'label') {
     const c = ins.cut;
-    if (c && c.exactName && c.stroked && !c.filled) { cut = 'keep'; add('cut', 'Cut path', 'pass', 'The file already has a stroked "CutContour" separation. It is kept as supplied.'); }
+    if (c?.hidden) add('cut', 'Cut path', 'fail', `The "${c.name}" separation is used inside a pattern, shading or text, where a cutter does not read it.`);
+    else if (c && c.exactName && c.stroked && !c.filled && c.openLoops) add('cut', 'Cut path', 'fail', `The CutContour has ${c.openLoops} open path${c.openLoops === 1 ? '' : 's'}; a cutter needs closed shapes.`);
+    else if (c && c.exactName && c.stroked && !c.filled) { cut = 'keep'; add('cut', 'Cut path', 'pass', 'The file already has a stroked "CutContour" separation. It is kept as supplied.'); }
     else if (c && !c.exactName) add('cut', 'Cut path', 'fail', `The cut separation is named "${c.name}", not "CutContour". The cutter would ignore it and the printer may print it as ink.`);
     else if (c && c.filled) add('cut', 'Cut path', 'fail', 'The CutContour separation is used as a fill, not a stroke.');
+    // A CutContour that is declared but never stroked (unused, zero tint, empty path) is no cut: trace one as for any file.
     else if (transparent && !(intent === 'label' && rectangular && m.coverage > 0.97)) { cut = 'contour'; add('cut', 'Cut path', 'warn', `No cut path. A contour can be traced from the artwork's transparency (${m.components} shape${m.components === 1 ? '' : 's'}).`); }
     else if (rectangular && m.whiteBorder < 0.9) { cut = 'rect'; add('cut', 'Cut path', 'warn', 'No cut path. The artwork is a filled rectangle, so a rectangular cut at the trim is exact.'); }
     else if (params.rectCut) { cut = 'rect'; add('cut', 'Cut path', 'warn', 'No cut path. Operator accepted a rectangular cut at the trim.'); }
     else add('cut', 'Cut path', 'fail', m.whiteBorder >= 0.9 ? 'No cut path, and the artwork sits on an opaque white background, so its outline cannot be separated reliably.' : 'No cut path, and the artwork has no transparency to trace a shape from.');
-  } else if (ins.cut) add('cut', 'Cut path', 'fail', `The file contains a "${ins.cut.name}" separation, but a ${INTENT_LABEL[intent].toLowerCase()} is not cut to shape. RollCue does not edit customer artwork, and a stray cut path can print as ink or trigger the cutter.`);
+  } else if (ins.cut && (ins.cut.stroked || ins.cut.filled || ins.cut.hidden)) add('cut', 'Cut path', 'fail', `The file contains a "${ins.cut.name}" separation, but a ${INTENT_LABEL[intent].toLowerCase()} is not cut to shape. RollCue does not edit customer artwork, and a stray cut path can print as ink or trigger the cutter.`);
 
-  // --- bleed (trimmed products) ---
-  if (intent === 'poster' || intent === 'banner') {
-    if (m.edgeTouch > 0.5 && (ins.bleedMm ?? 0) < 2) add('bleed', 'Bleed', 'warn', 'Artwork runs to the trim edge without bleed; a slight white edge is possible after trimming. RollCue never invents bleed.');
-    else add('bleed', 'Bleed', 'pass', ins.bleedMm ? `${ins.bleedMm} mm bleed.` : 'Artwork does not run to the edge.');
+  // --- bleed (trimmed products): measured at the finished size, and only where art actually fills it (Codex R3-7) ---
+  const isCut = intent === 'sticker' || intent === 'label';
+  const artScale = ins.widthMm && ins.heightMm ? (fit === 'fill' ? Math.max : Math.min)(target.w / ins.widthMm, target.h / ins.heightMm) : 1;
+  const bleedAtSize = r1((ins.bleedMm ?? 0) * artScale);
+  const bleedFilled = ins.trimEdgeTouch === null || m.edgeTouch > 0.5; // art reaches the outer box, not only the trim
+  if (!isCut) {
+    if ((ins.trimEdgeTouch ?? m.edgeTouch) > 0.5 && (bleedAtSize < 2 || !bleedFilled)) add('bleed', 'Bleed', 'warn', 'Artwork runs to the trim edge without bleed; a slight white edge is possible after trimming. RollCue never invents bleed.');
+    else add('bleed', 'Bleed', 'pass', bleedAtSize && bleedFilled ? `${mm(bleedAtSize)} mm bleed at the finished size.` : 'Artwork does not run to the edge.');
   }
 
-  // --- roll fit ---
-  const layout = rollLayout(target.w, target.h, intake.qty ?? 1, GAP_MM[intent], roll);
+  // --- roll fit: the footprint each item needs (cut offset or crop marks), not just the trim (Codex R3-9) ---
+  const marginMm = isCut ? Math.max(5, (params.offsetMm ?? DEFAULT_OFFSET[intent as 'sticker']) + 3) : TRIM_MARGIN_MM;
+  const offsetMm = cut === 'contour' ? clamp(params.offsetMm ?? DEFAULT_OFFSET[intent as 'sticker' | 'label'], PARAM_LIMITS.offsetMm) : 0;
+  const bleedMm = isCut ? 0 : fit === 'fill' ? FILL_BLEED_MM : bleedFilled ? Math.min(MAX_BLEED_MM, bleedAtSize) : 0;
+  const marks = cropMarkGeometry(marginMm, bleedMm);
+  const ext = isCut ? offsetMm : marks.gap + marks.len;
+  const layout = rollLayout(target.w + 2 * ext, target.h + 2 * ext, intake.qty ?? 1, GAP_MM[intent], roll, target.w * target.h);
   add('roll', 'Fits the roll', layout.fits ? 'pass' : 'fail', layout.fits ? `${layout.across} across${layout.rotated ? ' (rotated)' : ''} on ${roll.rollWidthMm} mm, about ${(layout.lengthMm / 1000).toFixed(2)} m of media for ${intake.qty ?? 1}.` : `Neither side fits the usable roll width of ${layout.usableWidthMm} mm; tiling is not supported.`);
 
   // --- decide ---
@@ -193,8 +213,11 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
     const asks: Record<string, string> = {
       resolution: `Please send the artwork at ${floor.warn} ppi or more at ${size(target.w, target.h)}, or as vector PDF.`,
       cut: intent === 'sticker' || intent === 'label' ? 'Please send the artwork with a stroked spot colour named exactly "CutContour", or as a PNG with a transparent background.' : 'Please send the artwork without the cut path; this job is printed and trimmed, not cut to shape.',
-      roll: `The longest side that fits our roll is ${layout.usableWidthMm} mm. Please confirm a smaller size or a split design.`,
+      roll: `The longest side that fits our roll is ${Math.floor(layout.usableWidthMm - 2 * ext)} mm. Please confirm a smaller size or a split design.`,
       rotation: 'Please export the PDF without page rotation.',
+      size: 'Please tell us the finished size you want; at its embedded resolution the file is larger than 5 m.',
+      pages: 'Please send one design per file, or tell us which page to print.',
+      annotations: 'Please flatten the PDF so its annotations and form fields become part of the page, and send it again.',
     };
     return {
       intent, intentSource, evidence, checks, target,
@@ -206,11 +229,8 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
     };
   }
 
-  const isCut = intent === 'sticker' || intent === 'label';
   const build: BuildPlan = {
-    cut, targetW: r1(target.w), targetH: r1(target.h), fit,
-    marginMm: isCut ? Math.max(5, (params.offsetMm ?? DEFAULT_OFFSET[intent as 'sticker']) + 3) : 15,
-    offsetMm: cut === 'contour' ? clamp(params.offsetMm ?? DEFAULT_OFFSET[intent as 'sticker' | 'label'], PARAM_LIMITS.offsetMm) : 0,
+    cut, targetW: r1(target.w), targetH: r1(target.h), fit, marginMm, bleedMm, offsetMm,
     radiusMm: cut === 'rect' ? clamp(params.radiusMm ?? 0, PARAM_LIMITS.radiusMm) : 0,
     cropMarks: !isCut,
   };
@@ -221,7 +241,7 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
   if (cut === 'keep') keeps.push('The supplied CutContour is kept exactly as drawn.');
   if (scale && Math.abs(scale - 1) > 0.005) changes.push(`Scale artwork ${scale.toFixed(2)}× to ${size(target.w, target.h)}.`);
   if (fit === 'fit') changes.push('Fit artwork inside the requested size; the uncovered area stays unprinted.');
-  if (fit === 'fill') changes.push('Fill the requested size; artwork beyond it is cropped.');
+  if (fit === 'fill') changes.push(`Fill the requested size; artwork beyond it is cropped${bleedMm ? `, keeping ${mm(bleedMm)} mm as bleed` : ''}.`);
   if (build.cropMarks) changes.push('Add crop marks outside the trim.');
   const warnings = checks.filter((c) => c.status === 'warn' && !['cut', 'scale', 'aspect'].includes(c.id)).map((c) => c.detail);
   if (params.acceptLowRes) warnings.unshift('Operator accepted printing below the resolution floor.');

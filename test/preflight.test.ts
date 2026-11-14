@@ -107,10 +107,10 @@ test('output validity: contour PDF keeps vectors, has a stroked CutContour separ
   const mask = binaryAlpha(new Uint8ClampedArray(r.render.rgba), r.render.w, r.render.h);
   const c = traceContour(mask, r.render.w, r.render.h, 60 / r.render.w, b.offsetMm);
   assert.ok(c.loops.length >= 1);
-  const pdf = await buildProduction({ kind: 'pdf', bytes: r.bytes, inspection: r.inspection, targetW: b.targetW, targetH: b.targetH, fit: b.fit, marginMm: b.marginMm, cut: c.loops, cropMarks: b.cropMarks, title: 't', subject: 's', stamp: new Date(0) });
+  const pdf = await buildProduction({ kind: 'pdf', bytes: r.bytes, inspection: r.inspection, targetW: b.targetW, targetH: b.targetH, fit: b.fit, marginMm: b.marginMm, bleedMm: b.bleedMm, cut: c.loops, cropMarks: b.cropMarks, title: 't', subject: 's', stamp: new Date(0) });
   const v = await verifyArtifact(pdf, { pageW: b.targetW + 2 * b.marginMm, pageH: b.targetH + 2 * b.marginMm, trim: { x: b.marginMm, y: b.marginMm, w: b.targetW, h: b.targetH }, cutLoops: c.loops.length });
   assert.ok(v.checks.every((k) => k.pass), JSON.stringify(v.checks.filter((k) => !k.pass)));
-  const again = await buildProduction({ kind: 'pdf', bytes: r.bytes, inspection: r.inspection, targetW: b.targetW, targetH: b.targetH, fit: b.fit, marginMm: b.marginMm, cut: c.loops, cropMarks: b.cropMarks, title: 't', subject: 's', stamp: new Date(0) });
+  const again = await buildProduction({ kind: 'pdf', bytes: r.bytes, inspection: r.inspection, targetW: b.targetW, targetH: b.targetH, fit: b.fit, marginMm: b.marginMm, bleedMm: b.bleedMm, cut: c.loops, cropMarks: b.cropMarks, title: 't', subject: 's', stamp: new Date(0) });
   assert.deepEqual(again, pdf, 'deterministic output');
   const plates = await ghostscriptPlates(pdf);
   if (plates === null) { console.log('# ghostscript not installed: tiffsep plate check skipped'); return; }

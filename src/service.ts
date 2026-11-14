@@ -38,7 +38,7 @@ type JobRow = {
 type ProposalRow = {
   id: string; job_id: string; revision: number; created_at: Date; status: string; kind: string; intent: string | null; build: unknown; params: Params; params_hash: string;
   policy_version: string; model_version: string; memory_version: string; artifact: Uint8Array | null; artifact_sha256: string | null; preview: Uint8Array | null;
-  verification: { checks: Check[]; contour: PrepareResult['contour'] } | null; overlay: PrepareResult['overlay']; binding_hash: string | null;
+  verification: { checks: Check[]; contour: PrepareResult['contour']; expect?: PrepareResult['expect'] } | null; overlay: PrepareResult['overlay']; binding_hash: string | null;
   approved_at: Date | null; approved_by: string | null; released_at: Date | null; ticket: Record<string, unknown> | null; error: string | null;
 };
 
@@ -256,7 +256,7 @@ export class Service {
       const ok = res.checks.every((c) => c.pass);
       const binding = bindingHash(job, { ...p, artifact_sha256: res.sha256 });
       await q(`update proposals set status = $2, artifact = $3, artifact_sha256 = $4, preview = $5, verification = $6::jsonb, overlay = $7::jsonb, binding_hash = $8, error = $9 where id = $1`,
-        [pid, ok ? 'prepared' : 'failed', res.artifact, res.sha256, res.preview, JSON.stringify({ checks: res.checks, contour: res.contour }), JSON.stringify(res.overlay), binding, ok ? null : 'Verification failed.']);
+        [pid, ok ? 'prepared' : 'failed', res.artifact, res.sha256, res.preview, JSON.stringify({ checks: res.checks, contour: res.contour, expect: res.expect }), JSON.stringify(res.overlay), binding, ok ? null : 'Verification failed.']);
       await this.#event(q, jid, ok ? 'proposal-prepared' : 'proposal-failed', { proposal: pid, artifactSha256: res.sha256, bindingHash: binding, checks: res.checks.map((c) => `${c.pass ? 'pass' : 'FAIL'} ${c.id}`), contour: res.contour });
     });
   }
@@ -367,9 +367,10 @@ export class Service {
     try {
       if (this.failNextRelease) { this.failNextRelease = false; throw new Error('Simulated execution failure (test hook).'); }
       const b = p.build as { targetW: number; targetH: number; marginMm: number; cut: string } | null;
-      const expect = b
+      // Re-check against exactly what preparation expected (loop count, bleed, art); older rows fall back to the build.
+      const expect = p.verification?.expect ?? (b
         ? { pageW: b.targetW + 2 * b.marginMm, pageH: b.targetH + 2 * b.marginMm, trim: { x: b.marginMm, y: b.marginMm, w: b.targetW, h: b.targetH }, cutLoops: b.cut === 'contour' || b.cut === 'rect' ? 1 : 0, keepsCut: b.cut === 'keep' }
-        : { pageW: 210, pageH: 297, trim: { x: 0, y: 0, w: 0, h: 0 }, cutLoops: 0, notice: true };
+        : { pageW: 210, pageH: 297, trim: { x: 0, y: 0, w: 0, h: 0 }, cutLoops: 0, notice: true });
       const bytes = new Uint8Array(p.artifact!);
       const v = await this.pool.run<{ checks: Check[] }>({ type: 'verify', artifact: bytes, expect }, [bytes.buffer as ArrayBuffer]);
       checks = v.checks;

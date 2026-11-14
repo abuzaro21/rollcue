@@ -3,6 +3,7 @@
 // anyone may approve it.
 import { PDFDocument, PDFName, PDFNumber, PDFOperator, PDFDict, StandardFonts, rgb, cmyk } from 'pdf-lib';
 import { PT_PER_MM, pdfStructure, renderPdfPage, type Inspection, type Kind } from './inspect.ts';
+import { cropMarkGeometry } from './layout.ts';
 import type { Pt } from './geom.ts';
 
 const pt = (mm: number) => PDFNumber.of(Math.round(mm * PT_PER_MM * 1000) / 1000);
@@ -19,6 +20,7 @@ export type ArtSpec = {
 
 export type BuildSpec = ArtSpec & {
   marginMm: number;
+  bleedMm: number; // art kept beyond the trim (fill clips here, not at the trim) and declared as the BleedBox
   cut: Pt[][] | null; // mm in the target art frame (origin = bottom-left of the trim area)
   cropMarks: boolean;
   title: string;
@@ -53,8 +55,9 @@ export async function buildProduction(spec: BuildSpec): Promise<Uint8Array> {
   const m = spec.marginMm;
 
   const f = renderFrame(spec);
-  const clip = spec.fit === 'fill';
-  if (clip) page.pushOperators(op('q'), op('re', [pt(m), pt(m), pt(spec.targetW), pt(spec.targetH)]), op('W'), op('n'));
+  const clip = spec.fit === 'fill', bl = spec.bleedMm;
+  // Clip at the bleed, not the trim, so the art that trimming needs survives (Codex R3-7).
+  if (clip) page.pushOperators(op('q'), op('re', [pt(m - bl), pt(m - bl), pt(spec.targetW + 2 * bl), pt(spec.targetH + 2 * bl)]), op('W'), op('n'));
   if (spec.kind === 'pdf') {
     const src = await PDFDocument.load(spec.bytes, { updateMetadata: false });
     const frame = spec.inspection.boxes!.crop ?? spec.inspection.boxes!.media;
@@ -87,8 +90,9 @@ export async function buildProduction(spec: BuildSpec): Promise<Uint8Array> {
     page.pushOperators(...ops);
   }
 
-  if (spec.cropMarks && m >= 6) {
-    const len = Math.min(m - 2, 8), gap = 2, k = cmyk(0, 0, 0, 1);
+  const { gap, len } = cropMarkGeometry(m, bl);
+  if (spec.cropMarks && len >= 3) {
+    const k = cmyk(0, 0, 0, 1);
     const line = (x1: number, y1: number, x2: number, y2: number) =>
       page.drawLine({ start: { x: x1 * PT_PER_MM, y: y1 * PT_PER_MM }, end: { x: x2 * PT_PER_MM, y: y2 * PT_PER_MM }, thickness: 0.25, color: k });
     for (const x of [m, m + spec.targetW]) { line(x, m - gap - len, x, m - gap); line(x, H - m + gap, x, H - m + gap + len); }
@@ -96,6 +100,8 @@ export async function buildProduction(spec: BuildSpec): Promise<Uint8Array> {
   }
 
   page.setTrimBox(m * PT_PER_MM, m * PT_PER_MM, spec.targetW * PT_PER_MM, spec.targetH * PT_PER_MM);
+  // Always declared, so a reader never mistakes blank margin for bleed.
+  page.setBleedBox((m - bl) * PT_PER_MM, (m - bl) * PT_PER_MM, (spec.targetW + 2 * bl) * PT_PER_MM, (spec.targetH + 2 * bl) * PT_PER_MM);
   doc.setTitle(spec.title); doc.setSubject(spec.subject); doc.setProducer('RollCue'); doc.setCreator('RollCue');
   doc.setCreationDate(spec.stamp); doc.setModificationDate(spec.stamp);
   return doc.save({ useObjectStreams: false });
@@ -140,7 +146,9 @@ function wrap(s: string, max: number): string[] {
 
 export type Check = { id: string; label: string; pass: boolean; detail: string };
 
-export type Expect = { pageW: number; pageH: number; trim: { x: number; y: number; w: number; h: number }; cutLoops: number; keepsCut?: boolean; notice?: boolean };
+type Rect = { x: number; y: number; w: number; h: number };
+/** What the artifact must contain. `art.region` (mm, page space) must show at least a quarter of the source's opaque coverage. */
+export type Expect = { pageW: number; pageH: number; trim: Rect; cutLoops: number; keepsCut?: boolean; notice?: boolean; bleedMm?: number; art?: { region: Rect; coverage: number } };
 
 /** Independent re-read of the artifact bytes. The UI and the release gate use these results; nothing is assumed. */
 export async function verifyArtifact(bytes: Uint8Array, e: Expect): Promise<{ checks: Check[]; preview: Buffer | null }> {
@@ -160,10 +168,16 @@ export async function verifyArtifact(bytes: Uint8Array, e: Expect): Promise<{ ch
     add('trim', 'Trim box', !!t && near(t.x, e.trim.x) && near(t.y, e.trim.y) && near(t.w, e.trim.w) && near(t.h, e.trim.h),
       t ? `${t.w.toFixed(2)} × ${t.h.toFixed(2)} mm at ${t.x.toFixed(2)}, ${t.y.toFixed(2)}` : 'missing');
   }
+  if (e.bleedMm !== undefined) add('bleed', 'Bleed box', structure.bleedMm !== null && near(structure.bleedMm, e.bleedMm), `${structure.bleedMm ?? 'none'} mm (expected ${e.bleedMm})`);
   if (e.cutLoops > 0 || e.keepsCut) {
-    const c = structure.cut;
+    // Counted from the strokes the page really paints, not from what the builder meant to draw (Codex R3-10).
+    const c = structure.cut, bb = c?.bboxMm;
     add('cut-name', 'Spot colour named exactly "CutContour"', !!c && c.exactName, c ? `found "${c.name}"` : 'no cut separation');
-    add('cut-stroke', 'CutContour is stroked, not filled', !!c && c.stroked && !c.filled, c ? `stroked=${c.stroked} filled=${c.filled}` : 'n/a');
+    add('cut-stroke', 'CutContour is stroked, not filled', !!c && c.stroked && !c.filled && !c.hidden, c ? `stroked=${c.stroked} filled=${c.filled}${c.hidden ? ' hidden' : ''}` : 'n/a');
+    add('cut-loops', 'Cut loop count', !!c && c.loops > 0 && c.loops === e.cutLoops, `${c?.loops ?? 0} stroked loop${c?.loops === 1 ? '' : 's'} (expected ${e.cutLoops})`);
+    add('cut-closed', 'Every cut loop is closed', !!c && c.loops > 0 && c.openLoops === 0, c ? `${c.openLoops} open` : 'n/a');
+    add('cut-bounds', 'Cut lies on the page', !!bb && bb.x >= -0.1 && bb.y >= -0.1 && bb.x + bb.w <= e.pageW + 0.1 && bb.y + bb.h <= e.pageH + 0.1,
+      bb ? `${bb.x.toFixed(1)}…${(bb.x + bb.w).toFixed(1)} × ${bb.y.toFixed(1)}…${(bb.y + bb.h).toFixed(1)} mm on ${e.pageW.toFixed(1)} × ${e.pageH.toFixed(1)}` : 'no stroked cut');
   } else if (!e.notice) {
     add('no-cut', 'No cut separation (none requested)', !structure.cut, structure.cut ? `unexpected "${structure.cut.name}"` : 'none');
   }
@@ -172,6 +186,15 @@ export async function verifyArtifact(bytes: Uint8Array, e: Expect): Promise<{ ch
     const r = await renderPdfPage(bytes, { ppi: Math.min(150, 1400 / (Math.max(e.pageW, e.pageH) / 25.4)) });
     preview = r.png;
     add('render', 'Renders in pdf.js', true, `${r.w} × ${r.h} px`);
+    if (e.art) {
+      const k = r.ppi / 25.4, g = e.art.region;
+      const x0 = Math.max(0, Math.floor(g.x * k)), x1 = Math.min(r.w, Math.ceil((g.x + g.w) * k));
+      const y0 = Math.max(0, Math.floor((e.pageH - g.y - g.h) * k)), y1 = Math.min(r.h, Math.ceil((e.pageH - g.y) * k));
+      let n = 0, o = 0;
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { n++; if (r.rgba[(y * r.w + x) * 4 + 3] > 127) o++; }
+      const got = n ? o / n : 0, want = e.art.coverage;
+      add('artwork', 'Artwork is on the page', want < 0.02 || got >= want * 0.25, `${Math.round(got * 100)}% of the art area painted (source ${Math.round(want * 100)}%)`);
+    }
   } catch (err) { add('render', 'Renders in pdf.js', false, String((err as Error).message)); }
   return { checks, preview };
 }

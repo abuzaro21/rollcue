@@ -44,7 +44,7 @@ operator: approve (bound to sha256 of the artifact + versions) ─► re-verify 
 
 - **Inference:** a small multinomial logistic regression over 36 named features extracted from the real file, with temperature calibration and abstention. Explanations are the model's own per-feature contributions. No LLM, no external API. See [INTENT-INFERENCE.md](docs/INTENT-INFERENCE.md) and [INFERENCE-EVALUATION.md](docs/INFERENCE-EVALUATION.md).
 - **Production rules** are deterministic and versioned. Learning never changes them.
-- **Artifacts** are real PDFs: the customer's page embedded unchanged plus a `Separation /CutContour` stroke. They are re-parsed, re-rendered and, in CI, separated by Ghostscript into plates.
+- **Artifacts** are real PDFs: the customer's page embedded unchanged plus a `Separation /CutContour` stroke. They are re-parsed and re-rendered, and the cut strokes the page actually paints are counted and bounds-checked. In CI, Ghostscript also separates them into plates; that only confirms a CutContour plate exists.
 - **Safety:** every change bumps a revision and supersedes open proposals; stale work cannot be approved; execution is idempotent and re-verified. See [ACTION-SAFETY.md](docs/ACTION-SAFETY.md).
 
 ## Run locally

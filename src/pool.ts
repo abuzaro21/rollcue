@@ -1,5 +1,5 @@
 // One worker thread, one task at a time, hard timeout. A timed-out or crashed worker is terminated and replaced, so a
-// hostile file costs at most one timeout and never blocks the request thread.
+// hostile file never blocks the request thread. The heap cap does not bound native canvas memory (Codex R3-13).
 import { Worker } from 'node:worker_threads';
 import type { Task } from './worker.ts';
 

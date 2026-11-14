@@ -7,8 +7,8 @@ RollCue accepts files from strangers and makes production decisions about them. 
 | Control | Detail | Where |
 |---|---|---|
 | Type by content | Magic bytes decide PDF, PNG or JPEG. Extension and MIME type are ignored. Anything else: 415. | `inspect.ts` |
-| Size caps | 10 MB body (`413` before parsing), 20 PDF pages, 50 megapixels (read from the image header **before** decoding), 5 m page side. | `inspect.ts`, `http.ts` |
-| Isolation | All parsing and rendering runs in one `worker_thread` with a 320 MB heap cap and a 25 s hard timeout. A worker that times out or crashes is terminated and replaced; the request thread never parses files. | `pool.ts` |
+| Size caps | 10 MB body (`413` before parsing), 20 PDF pages, 50 megapixels per raster (read from the image header **before** decoding), 100 megapixels of declared images per PDF (refused before decoding), 5 m on every PDF page box (checked before rendering), and 5 m on the finished size of any job. | `inspect.ts`, `policy.ts`, `http.ts` |
+| Isolation | All parsing and rendering runs in one `worker_thread` with a 320 MB heap cap and a 25 s hard timeout. A worker that times out or crashes is terminated and replaced; the request thread never parses files. This is not hard memory isolation: native canvas memory and decompressed streams sit outside the heap cap (Codex R3-13). | `pool.ts` |
 | No active content | pdf.js runs with `isEvalSupported: false`. JavaScript, actions, attachments, forms and external references in PDFs are never executed or followed. No SVG. | `inspect.ts` |
 | Malformed files | Any parser error becomes a typed `malformed` rejection with a plain message. | `inspect.ts`, `preflight.test.ts`, `api.test.ts` |
 | Originals untouched | The uploaded bytes are stored once with their sha256 and only read. | `service.ts` |

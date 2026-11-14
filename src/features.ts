@@ -73,11 +73,16 @@ export function targetSize(ins: Inspection, intake: Intake): { w: number; h: num
   return null;
 }
 
-/** Effective resolution of the raster content at the target size, or null when it cannot be known. */
-export function effectivePpi(ins: Inspection, target: { w: number } | null): number | null {
+/**
+ * Effective resolution of the raster content at the target size, or null when it cannot be known. `fit` is how the art
+ * meets a target of different proportions: fit scales by the smaller ratio, fill by the larger (Codex R3-2). The model's
+ * feature uses the default proportional reading.
+ */
+export function effectivePpi(ins: Inspection, target: { w: number; h?: number } | null, fit: 'scale' | 'fit' | 'fill' = 'scale'): number | null {
   if (!target) return null;
-  if (ins.pixels) return Math.round(ins.pixels.w / (target.w / 25.4));
-  if (ins.densityPpi && ins.widthMm) return Math.round(ins.densityPpi * (ins.widthMm / target.w));
+  const s = (w: number, h: number) => (fit === 'scale' || target.h === undefined ? target.w / w : (fit === 'fit' ? Math.min : Math.max)(target.w / w, target.h / h));
+  if (ins.pixels) return Math.round(25.4 / s(ins.pixels.w, ins.pixels.h));
+  if (ins.densityPpi && ins.widthMm && ins.heightMm) return Math.round(ins.densityPpi / s(ins.widthMm, ins.heightMm));
   return null;
 }
 

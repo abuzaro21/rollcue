@@ -30,7 +30,7 @@ One Node 24 process serves the API and the built React UI. File work runs in a s
 | `src/model.ts` | Multinomial logistic regression, temperature calibration, abstention, per-feature explanations, session correction memory, evidence gate. |
 | `src/policy.ts` | Deterministic production rules (`POLICY_VERSION`): resolution at size, roll fit, cut path presence and naming, bleed, size mismatch. Produces one decision: `intent`, `size`, `return` or `release`. |
 | `src/geom.ts` | Alpha mask → distance-transform offset → marching squares → simplified cut loops in mm. |
-| `src/pdfout.ts` | Production PDF: the source page embedded unchanged, scaled to target, crop marks, and a `Separation /CutContour` stroke. Return notices. `verifyArtifact` re-parses and re-renders the output and checks page size, trim, cut name, cut stroke and loop count. |
+| `src/pdfout.ts` | Production PDF: the source page embedded unchanged, scaled to target, a declared BleedBox, crop marks outside the bleed, and a `Separation /CutContour` stroke. Return notices. `verifyArtifact` re-parses and re-renders the output. It checks page size, trim and bleed boxes, and the cut name. From the strokes the page actually paints, it checks the stroke, the exact loop count, that every loop is closed and that the cut lies on the page. It also checks that the art region really shows the art. |
 | `src/layout.ts` | Places the job on the roll width and estimates media length. |
 | `src/service.ts` | All state transitions. See [ACTION-SAFETY.md](ACTION-SAFETY.md). |
 | `src/http.ts` | Routes, limits and headers. See [SECURITY.md](SECURITY.md). |
@@ -59,5 +59,5 @@ On start, `recover()` finds jobs left `analysing` and proposals left `preparing`
 ## Why this shape
 
 - **No LLM.** The job needs a calibrated, explainable decision over measured file properties. A small model trained on generated files gives exact explanations and honest abstention, costs nothing to run, and has no prompt-injection surface. See [ARCHITECTURE-DECISIONS.md](ARCHITECTURE-DECISIONS.md) D3.
-- **Worker thread, not child processes.** Hostile files cost one timeout, not the server. Nothing in `src/` spawns processes; a test enforces that.
+- **Worker thread, not child processes.** Nothing in `src/` spawns processes; a test enforces that. The worker is not hard memory isolation. It has a V8 heap cap and a timeout, and declared image sizes are budgeted before decoding. Native canvas memory and decompressed streams are bounded only by those limits, so a hostile file can still cost the container more than one timeout (Codex R3-13).
 - **Artifacts in the database.** A restart or redeploy on an ephemeral disk keeps every prepared file.

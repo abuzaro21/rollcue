@@ -226,6 +226,7 @@ export function traceContour(mask: Uint8Array, w: number, h: number, pxMm: numbe
 }
 
 export function rectLoop(x: number, y: number, w: number, h: number, r = 0): Pt[] {
+  r = Math.min(r, w / 2, h / 2); // a larger radius would leave the trim (Codex R3-6)
   if (r <= 0) return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
   const pts: Pt[] = [];
   const corner = (cx: number, cy: number, a0: number) => {

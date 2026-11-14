@@ -16,7 +16,11 @@ export type Layout = {
   utilisation: number; // printed item area ÷ consumed media area
 };
 
-export function rollLayout(w: number, h: number, qty: number, gapMm: number, roll: RollSettings = DEFAULT_ROLL): Layout {
+/** Crop marks start `gap` outside the trim (never inside the bleed) and run `len`; both fit inside the page margin. */
+export const cropMarkGeometry = (marginMm: number, bleedMm: number) => { const gap = Math.max(2, bleedMm); return { gap, len: Math.min(marginMm - gap - 1, 8) }; };
+
+/** `w` × `h` is the footprint each item needs on the roll (trim plus cut offset or marks); `itemArea` is the finished area. */
+export function rollLayout(w: number, h: number, qty: number, gapMm: number, roll: RollSettings = DEFAULT_ROLL, itemArea = w * h): Layout {
   const usable = roll.rollWidthMm - 2 * roll.sideMarginMm;
   const options = [false, true].map((rotated) => {
     const iw = rotated ? h : w, ih = rotated ? w : h;
@@ -33,6 +37,6 @@ export function rollLayout(w: number, h: number, qty: number, gapMm: number, rol
   return {
     fits: true, across: Math.min(best.across, qty), rows: best.rows, rotated: best.rotated, itemW: best.iw, itemH: best.ih, gapMm,
     lengthMm: Math.round(best.lengthMm), usableWidthMm: usable,
-    utilisation: Math.round(((w * h * qty) / consumed) * 1000) / 1000,
+    utilisation: Math.round(((itemArea * qty) / consumed) * 1000) / 1000,
   };
 }

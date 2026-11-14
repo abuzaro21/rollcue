@@ -11,12 +11,18 @@ export const MAX_BYTES = 10 * 1024 * 1024;
 export const MAX_PIXELS = 50_000_000; // raster decode cap, read from the header before decoding
 export const MAX_PAGES = 20;
 export const MAX_SIDE_MM = 5000;
+export const MAX_PAGE_MM = MAX_SIDE_MM + 200; // page box incl. room for bleed and marks
+export const MAX_PDF_IMAGE_PIXELS = 100_000_000; // declared image pixels across the whole PDF, checked before decoding
 export const RENDER_LONG_SIDE_PX = 1600;
 export const RENDER_MAX_PPI = 300;
 
 export type Kind = 'pdf' | 'png' | 'jpeg';
 export type Box = { x: number; y: number; w: number; h: number }; // mm, PDF user space
-export type CutPath = { name: string; exactName: boolean; stroked: boolean; filled: boolean };
+/**
+ * A cut separation as the page actually paints it (executed content only). `hidden`: used inside a pattern, shading or
+ * text, where a cutter would not find it. `loops`/`openLoops`/`bboxMm` describe the stroked subpaths in page space.
+ */
+export type CutPath = { name: string; exactName: boolean; stroked: boolean; filled: boolean; hidden: boolean; loops: number; openLoops: number; bboxMm: Box | null };
 
 export type Inspection = {
   kind: Kind;
@@ -33,7 +39,9 @@ export type Inspection = {
   pathOps: number;
   spots: string[]; // Separation / DeviceN colourant names found in page 1 resources (including nested forms)
   cut: CutPath | null; // the best candidate cut separation, if any
+  printableAnnots: number; // page-1 annotations / form fields that print; production output cannot carry them
   mask: MaskStats; // alpha analysis of the page-1 render
+  trimEdgeTouch: number | null; // share of the trim-box outline covered by art (PDF with a trim box inside the render)
   renderPpi: number;
   warnings: string[];
 };
@@ -75,8 +83,29 @@ export function pngMeta(b: Uint8Array): RasterMeta {
   return { w, h, ppi, alpha: colorType === 4 || colorType === 6 || trns };
 }
 
+/** EXIF IFD0: orientation and resolution. Unreadable EXIF is ignored, never trusted. */
+export function exifMeta(b: Uint8Array, start: number, end: number): { orientation: number | null; ppi: number | null } {
+  const out = { orientation: null as number | null, ppi: null as number | null };
+  try {
+    const dv = new DataView(b.buffer, b.byteOffset + start, end - start);
+    const le = dv.getUint16(0) === 0x4949;
+    const ifd = dv.getUint32(4, le), n = dv.getUint16(ifd, le);
+    let xres: number | null = null, yres: number | null = null, unit = 2;
+    const rational = (e: number) => { const o = dv.getUint32(e + 8, le), den = dv.getUint32(o + 4, le); return den ? dv.getUint32(o, le) / den : null; };
+    for (let i = 0; i < Math.min(n, 256); i++) {
+      const e = ifd + 2 + i * 12, tag = dv.getUint16(e, le);
+      if (tag === 0x0112) out.orientation = dv.getUint16(e + 8, le);
+      if (tag === 0x011a) xres = rational(e);
+      if (tag === 0x011b) yres = rational(e);
+      if (tag === 0x0128) unit = dv.getUint16(e + 8, le);
+    }
+    if (xres && xres === yres && (unit === 2 || unit === 3)) out.ppi = Math.round((unit === 3 ? xres * 2.54 : xres) * 100) / 100;
+  } catch { /* truncated or malformed EXIF */ }
+  return out;
+}
+
 export function jpegMeta(b: Uint8Array): RasterMeta {
-  let ppi: number | null = null, w = 0, h = 0;
+  let ppi: number | null = null, exifPpi: number | null = null, w = 0, h = 0;
   for (let p = 2; p + 4 <= b.length;) {
     if (b[p] !== 0xff) { p++; continue; }
     const marker = b[p + 1];
@@ -86,6 +115,12 @@ export function jpegMeta(b: Uint8Array): RasterMeta {
       const units = b[p + 11], xd = (b[p + 12] << 8) | b[p + 13], yd = (b[p + 14] << 8) | b[p + 15];
       if (xd > 0 && xd === yd) ppi = units === 1 ? xd : units === 2 ? Math.round(xd * 2.54 * 100) / 100 : null;
     }
+    if (marker === 0xe1 && String.fromCharCode(b[p + 4], b[p + 5], b[p + 6], b[p + 7]) === 'Exif') {
+      const ex = exifMeta(b, p + 10, Math.min(b.length, p + 2 + len));
+      // Canvas would honour the orientation while the PDF embeds raw pixels, so preview and print would disagree (Codex R3-11).
+      if (ex.orientation !== null && ex.orientation !== 1) throw new Rejected('unsupported', `The JPEG is stored rotated (EXIF orientation ${ex.orientation}), so the preview and the print would disagree. Please export it upright.`);
+      exifPpi = ex.ppi;
+    }
     if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb)) {
       h = (b[p + 5] << 8) | b[p + 6]; w = (b[p + 7] << 8) | b[p + 8];
       break;
@@ -93,7 +128,7 @@ export function jpegMeta(b: Uint8Array): RasterMeta {
     p += 2 + len;
   }
   if (!w || !h) throw new Rejected('malformed', 'The JPEG has no readable frame header.');
-  return { w, h, ppi, alpha: false };
+  return { w, h, ppi: ppi ?? exifPpi, alpha: false };
 }
 
 // ---------- PDF structure ----------
@@ -187,35 +222,135 @@ function streamText(s: PDFStream): string {
   } catch { return ''; }
 }
 
+type Use = { stroked: boolean; filled: boolean; hidden: boolean; loops: number; openLoops: number; bbox: number[] | null };
+type Gs = { ctm: number[]; sCs: string[] | null; sTint: number; sPat: string | null; fCs: string[] | null; fTint: number; fPat: string | null };
+const PATTERN = ['#pattern'];
+const MAX_TOKENS = 5_000_000;
+const mul = (m: number[], n: number[]) => [
+  m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3],
+  m[2] * n[0] + m[3] * n[2], m[2] * n[1] + m[3] * n[3],
+  m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5],
+];
+
 /**
- * Minimal content-stream scan: tracks the stroke/fill colour space through q/Q and reports which colour-space resource
- * keys were used to stroke or fill a path. Strings, inline images and dictionaries are skipped, not interpreted.
+ * Follows the content that page 1 actually executes (page streams, invoked forms, painted tiling patterns), with each
+ * form's own resources and the graphics state, and records how every Separation/DeviceN colourant is painted. A colour
+ * space that is only declared, a process-colour reset, a zero tint or an empty path paints no cut (Codex R3-4).
+ * Strings and inline images are skipped; text painted in a colourant marks it hidden.
  */
-export function scanColourUse(content: string): { stroked: Set<string>; filled: Set<string> } {
-  const stroked = new Set<string>(), filled = new Set<string>();
-  const stack: Array<[string, string]> = [];
-  let strokeCs = '', fillCs = '', last = '';
-  const re = /\((?:\\.|[^\\)])*\)|<<|>>|<[0-9a-fA-F\s]*>|\/[^\s/<>()[\]{}%]*|%[^\r\n]*|\bBI\b[\s\S]*?\bEI\b|[^\s/<>()[\]{}%]+/g;
-  for (const m of content.matchAll(re)) {
-    const t = m[0];
-    if (t.startsWith('/')) { last = t.slice(1); continue; }
-    switch (t) {
-      case 'q': stack.push([strokeCs, fillCs]); break;
-      case 'Q': [strokeCs, fillCs] = stack.pop() ?? ['', '']; break;
-      case 'CS': strokeCs = last; break;
-      case 'cs': fillCs = last; break;
-      case 'S': case 's': if (strokeCs) stroked.add(strokeCs); break;
-      case 'f': case 'F': case 'f*': if (fillCs) filled.add(fillCs); break;
-      case 'B': case 'B*': case 'b': case 'b*':
-        if (strokeCs) stroked.add(strokeCs);
-        if (fillCs) filled.add(fillCs);
-        break;
+export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources: PDFDict | undefined): Map<string, Use> {
+  const uses = new Map<string, Use>();
+  const use = (n: string) => { let u = uses.get(n); if (!u) uses.set(n, u = { stroked: false, filled: false, hidden: false, loops: 0, openLoops: 0, bbox: null }); return u; };
+  const sub = (res: PDFDict | undefined, cat: string, key: string) => { const d = res?.lookup(PDFName.of(cat)); return d instanceof PDFDict ? d.lookup(PDFName.of(key)) : undefined; };
+  const colourants = (v: unknown): string[] | null => {
+    const arr = v instanceof PDFRef ? doc.context.lookup(v) : v;
+    if (!(arr instanceof PDFArray) || arr.size() < 2) return arr?.toString() === '/Pattern' ? PATTERN : null;
+    const family = arr.lookup(0)?.toString();
+    if (family === '/Pattern') return PATTERN;
+    if (family === '/Separation') return [decodeName(arr.lookup(1)?.toString())];
+    if (family === '/DeviceN') { const l = arr.lookup(1); return l instanceof PDFArray ? l.asArray().map((n) => decodeName(doc.context.lookup(n)?.toString())) : null; }
+    return null;
+  };
+  const resolveCs = (res: PDFDict | undefined, name: string) => name === 'Pattern' ? PATTERN : /^Device|^Cal|^Lab$/.test(name) ? null : colourants(sub(res, 'ColorSpace', name));
+  let tokens = 0;
+  const onStack = new Set<PDFStream>();
+
+  const exec = (content: string, res: PDFDict | undefined, gs0: Gs, hidden: boolean, depth: number) => {
+    const re = /\((?:\\.|[^\\)])*\)|<<|>>|<[0-9a-fA-F\s]*>|\/[^\s/<>()[\]{}%]*|%[^\r\n]*|\bBI\b[\s\S]*?\bEI\b|[^\s/<>()[\]{}%]+/g;
+    const stack: Gs[] = [];
+    let gs: Gs = { ...gs0 };
+    let ops: string[] = [];
+    let path: Array<{ pts: number[][]; segs: number; closed: boolean }> = [];
+    const cur = () => path.at(-1);
+    const num = (i: number) => Number(ops[ops.length - i]);
+    const pt = (x: number, y: number) => [gs.ctm[0] * x + gs.ctm[2] * y + gs.ctm[4], gs.ctm[1] * x + gs.ctm[3] * y + gs.ctm[5]];
+    const lastName = () => { for (let i = ops.length - 1; i >= 0; i--) if (ops[i].startsWith('/')) return decodeName(ops[i]); return ''; };
+    const runPattern = (name: string | null) => {
+      const p = name ? sub(res, 'Pattern', name) : undefined;
+      if (p instanceof PDFStream) runForm(p, res, true); // tiling pattern: its cells are painted
+      else if (p instanceof PDFDict) { const sh = p.lookup(PDFName.of('Shading')); if (sh instanceof PDFDict) for (const n of colourants(sh.get(PDFName.of('ColorSpace'))) ?? []) use(n).hidden = true; }
+    };
+    const runForm = (s: PDFStream, parentRes: PDFDict | undefined, inPattern: boolean) => {
+      if (onStack.has(s) || depth > 12) return;
+      const m = s.dict.lookup(PDFName.of('Matrix'));
+      const mat = m instanceof PDFArray && m.size() === 6 ? m.asArray().map((x) => Number(doc.context.lookup(x)?.toString())) : [1, 0, 0, 1, 0, 0];
+      const r = s.dict.lookup(PDFName.of('Resources'));
+      onStack.add(s);
+      exec(streamText(s), r instanceof PDFDict ? r : parentRes, { ...gs, ctm: mul(mat.every(Number.isFinite) ? mat : [1, 0, 0, 1, 0, 0], gs.ctm) }, hidden || inPattern, depth + 1);
+      onStack.delete(s);
+    };
+    const paint = (stroke: boolean, fill: boolean) => {
+      if (fill && gs.fCs === PATTERN) runPattern(gs.fPat);
+      if (stroke && gs.sCs === PATTERN) runPattern(gs.sPat);
+      const drawn = path.filter((p) => p.segs > 0);
+      if (drawn.length && fill && gs.fCs && gs.fCs !== PATTERN && gs.fTint > 0) for (const n of gs.fCs) { const u = use(n); u.filled = true; if (hidden) u.hidden = true; }
+      if (drawn.length && stroke && gs.sCs && gs.sCs !== PATTERN && gs.sTint > 0) for (const n of gs.sCs) {
+        const u = use(n);
+        if (hidden) { u.hidden = true; continue; }
+        u.stroked = true;
+        for (const p of drawn) {
+          u.loops++;
+          const [a, z] = [p.pts[0], p.pts.at(-1)!];
+          if (!p.closed && Math.hypot(a[0] - z[0], a[1] - z[1]) > 0.01) u.openLoops++;
+          for (const [x, y] of p.pts) u.bbox = u.bbox ? [Math.min(u.bbox[0], x), Math.min(u.bbox[1], y), Math.max(u.bbox[2], x), Math.max(u.bbox[3], y)] : [x, y, x, y];
+        }
+      }
+      path = [];
+    };
+    for (const mt of content.matchAll(re)) {
+      if (++tokens > MAX_TOKENS) throw new Rejected('too-complex', 'The PDF page is too complex to inspect.');
+      const t = mt[0];
+      if (t.startsWith('/') || /^[+-]?(\d+\.?\d*|\.\d+)$/.test(t)) { ops.push(t); continue; }
+      if (t[0] === '(' || t[0] === '<' || t[0] === '%' || t === '>>' || t.startsWith('BI')) continue;
+      switch (t) {
+        case 'q': stack.push(gs); gs = { ...gs }; break;
+        case 'Q': gs = stack.pop() ?? gs; break;
+        case 'cm': if (ops.length >= 6) gs.ctm = mul([num(6), num(5), num(4), num(3), num(2), num(1)], gs.ctm); break;
+        case 'CS': gs.sCs = resolveCs(res, lastName()); gs.sTint = 1; gs.sPat = null; break;
+        case 'cs': gs.fCs = resolveCs(res, lastName()); gs.fTint = 1; gs.fPat = null; break;
+        case 'SC': case 'SCN': if (gs.sCs === PATTERN) gs.sPat = lastName(); else { const v = ops.filter((o) => !o.startsWith('/')).map(Number); gs.sTint = v.length ? Math.max(...v) : gs.sTint; } break;
+        case 'sc': case 'scn': if (gs.fCs === PATTERN) gs.fPat = lastName(); else { const v = ops.filter((o) => !o.startsWith('/')).map(Number); gs.fTint = v.length ? Math.max(...v) : gs.fTint; } break;
+        case 'G': case 'RG': case 'K': gs.sCs = null; break;
+        case 'g': case 'rg': case 'k': gs.fCs = null; break;
+        case 'm': path.push({ pts: [pt(num(2), num(1))], segs: 0, closed: false }); break;
+        case 'l': cur()?.pts.push(pt(num(2), num(1))); if (cur()) cur()!.segs++; break;
+        case 'c': case 'v': case 'y': {
+          const n = t === 'c' ? 3 : 2;
+          for (let i = n; i >= 1; i--) cur()?.pts.push(pt(num(2 * i), num(2 * i - 1)));
+          if (cur()) cur()!.segs++;
+          break;
+        }
+        case 're': {
+          const [x, y, w, h] = [num(4), num(3), num(2), num(1)];
+          path.push({ pts: [pt(x, y), pt(x + w, y), pt(x + w, y + h), pt(x, y + h)], segs: 4, closed: true });
+          break;
+        }
+        case 'h': if (cur()) cur()!.closed = true; break;
+        case 'S': paint(true, false); break;
+        case 's': if (cur()) cur()!.closed = true; paint(true, false); break;
+        case 'f': case 'F': case 'f*': paint(false, true); break;
+        case 'B': case 'B*': paint(true, true); break;
+        case 'b': case 'b*': if (cur()) cur()!.closed = true; paint(true, true); break;
+        case 'n': path = []; break;
+        case 'Tj': case 'TJ': case "'": case '"':
+          for (const n of [...(gs.fCs && gs.fCs !== PATTERN && gs.fTint > 0 ? gs.fCs : []), ...(gs.sCs && gs.sCs !== PATTERN ? gs.sCs : [])]) use(n).hidden = true;
+          break;
+        case 'sh': { const sh = sub(res, 'Shading', lastName()); if (sh instanceof PDFDict || sh instanceof PDFStream) { const d = sh instanceof PDFStream ? sh.dict : sh; for (const n of colourants(d.get(PDFName.of('ColorSpace'))) ?? []) use(n).hidden = true; } break; }
+        case 'Do': {
+          const x = sub(res, 'XObject', lastName());
+          if (x instanceof PDFStream && x.dict.lookup(PDFName.of('Subtype'))?.toString() === '/Form') runForm(x, res, false);
+          break;
+        }
+      }
+      ops = [];
     }
-  }
-  return { stroked, filled };
+  };
+  // A page's content array is one logical stream: q in one part may be closed by Q in the next.
+  exec(streams.map(streamText).join('\n'), resources, { ctm: [1, 0, 0, 1, 0, 0], sCs: null, sTint: 1, sPat: null, fCs: null, fTint: 1, fPat: null }, false, 0);
+  return uses;
 }
 
-export type PdfStructure = Pick<Inspection, 'pages' | 'boxes' | 'bleedMm' | 'rotation' | 'spots' | 'cut'>;
+export type PdfStructure = Pick<Inspection, 'pages' | 'boxes' | 'bleedMm' | 'rotation' | 'spots' | 'cut' | 'printableAnnots'>;
 
 export async function pdfStructure(bytes: Uint8Array): Promise<PdfStructure> {
   let doc: PDFDocument;
@@ -232,6 +367,15 @@ export async function pdfStructure(bytes: Uint8Array): Promise<PdfStructure> {
   if (pages > MAX_PAGES) throw new Rejected('too-many-pages', `The PDF has ${pages} pages; the limit is ${MAX_PAGES}.`);
   const page = doc.getPage(0);
   const node = page.node;
+  const unit = node.lookup(PDFName.of('UserUnit'));
+  if (unit !== undefined && Number(unit.toString()) !== 1) throw new Rejected('unsupported', `Page 1 uses a custom unit size (UserUnit ${unit.toString()}), so its physical size would be measured wrongly. Please export it with the default unit.`); // Codex R3-1
+  // Decoded image size is declared up front; refuse before pdf.js allocates it (Codex R3-13).
+  let imagePixels = 0;
+  for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+    if (!(obj instanceof PDFStream) || obj.dict.lookup(PDFName.of('Subtype'))?.toString() !== '/Image') continue;
+    imagePixels += Number(obj.dict.lookup(PDFName.of('Width'))?.toString()) * Number(obj.dict.lookup(PDFName.of('Height'))?.toString()) || 0;
+  }
+  if (imagePixels > MAX_PDF_IMAGE_PIXELS) throw new Rejected('too-large', `The PDF's images total ${Math.round(imagePixels / 1e6)} megapixels; the limit is ${MAX_PDF_IMAGE_PIXELS / 1e6}.`);
   const media = toBox(inherited(node, 'MediaBox'));
   if (!media) throw new Rejected('malformed', 'Page 1 has no MediaBox.');
   const crop = toBox(inherited(node, 'CropBox'));
@@ -243,31 +387,36 @@ export async function pdfStructure(bytes: Uint8Array): Promise<PdfStructure> {
     bleedMm = Math.max(0, Math.min(trim.x - outer.x, trim.y - outer.y, outer.x + outer.w - (trim.x + trim.w), outer.y + outer.h - (trim.y + trim.h)));
     bleedMm = Math.round(bleedMm * 100) / 100;
   }
-  const { out: spotMap, forms } = collectSpots(doc, node.Resources());
-  const spots = [...new Set([...spotMap.values()].flatMap((s) => [...s]))];
-
-  // Which resource keys are stroked / filled anywhere in page 1 or its forms.
-  const stroked = new Set<string>(), filled = new Set<string>();
+  const { out: spotMap } = collectSpots(doc, node.Resources());
   const contents = node.Contents();
   const streams: PDFStream[] = [];
   if (contents instanceof PDFStream) streams.push(contents);
   else if (contents instanceof PDFArray) for (const r of contents.asArray()) { const s = doc.context.lookup(r); if (s instanceof PDFStream) streams.push(s); }
-  for (const s of [...streams, ...forms]) {
-    const use = scanColourUse(streamText(s));
-    use.stroked.forEach((k) => stroked.add(k));
-    use.filled.forEach((k) => filled.add(k));
+  const uses = scanColourUse(doc, streams, node.Resources());
+  const spots = [...new Set([...[...spotMap.values()].flatMap((s) => [...s]), ...[...uses.keys()].filter((n) => !/^(Cyan|Magenta|Yellow|Black|None|All)$/.test(n))])];
+
+  // Annotations print only if their Print flag is set; Links and Popups never draw (Codex R3-8).
+  const annots = node.lookup(PDFName.of('Annots'));
+  let printableAnnots = 0;
+  if (annots instanceof PDFArray) for (const a of annots.asArray()) {
+    const d = doc.context.lookup(a);
+    if (!(d instanceof PDFDict) || /^\/(Link|Popup)$/.test(d.lookup(PDFName.of('Subtype'))?.toString() ?? '')) continue;
+    if ((Number(d.lookup(PDFName.of('F'))?.toString()) & 4) && d.lookup(PDFName.of('AP'))) printableAnnots++;
   }
 
   let cut: CutPath | null = null;
-  for (const [key, names] of spotMap) {
-    for (const name of names) {
-      if (!CUT_PATTERN.test(name.trim())) continue;
-      const candidate: CutPath = { name, exactName: name === 'CutContour', stroked: stroked.has(key), filled: filled.has(key) };
-      // Prefer the exact name, then a stroked use.
-      if (!cut || (candidate.exactName && !cut.exactName) || (candidate.exactName === cut.exactName && candidate.stroked && !cut.stroked)) cut = candidate;
-    }
+  for (const name of spots) {
+    if (!CUT_PATTERN.test(name.trim())) continue;
+    const u = uses.get(name);
+    const b = u?.bbox;
+    const candidate: CutPath = {
+      name, exactName: name === 'CutContour', stroked: !!u?.stroked, filled: !!u?.filled, hidden: !!u?.hidden, loops: u?.loops ?? 0, openLoops: u?.openLoops ?? 0,
+      bboxMm: b ? { x: round2(b[0] / PT_PER_MM), y: round2(b[1] / PT_PER_MM), w: round2((b[2] - b[0]) / PT_PER_MM), h: round2((b[3] - b[1]) / PT_PER_MM) } : null,
+    };
+    // Prefer the exact name, then a stroked use.
+    if (!cut || (candidate.exactName && !cut.exactName) || (candidate.exactName === cut.exactName && candidate.stroked && !cut.stroked)) cut = candidate;
   }
-  return { pages, boxes: { media, crop, trim, bleed }, bleedMm, rotation: page.getRotation().angle % 360, spots, cut };
+  return { pages, boxes: { media, crop, trim, bleed }, bleedMm, rotation: page.getRotation().angle % 360, spots, cut, printableAnnots };
 }
 
 // ---------- rendering ----------
@@ -283,12 +432,15 @@ async function opStats(page: pdfjs.PDFPageProxy): Promise<{ images: number; path
   const O = pdfjs.OPS;
   let ctm = [1, 0, 0, 1, 0, 0];
   const stack: number[][] = [];
-  const mul = (m: number[], n: number[]) => [
-    m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3],
-    m[2] * n[0] + m[3] * n[2], m[2] * n[1] + m[3] * n[3],
-    m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5],
-  ];
-  let images = 0, paths = 0, minPpi: number | null = null;
+  let images = 0, unresolved = 0, paths = 0, minPpi: number | null = null;
+  // The image's unit square maps through the CTM; each pixel axis has its own scale, and the weaker one counts (Codex R3-2).
+  const place = (pxW: unknown, pxH: unknown) => {
+    images++;
+    const w = Math.hypot(ctm[0], ctm[1]), h = Math.hypot(ctm[2], ctm[3]);
+    const ppi = Math.min(Number(pxW) / (w / 72), Number(pxH) / (h / 72));
+    if (Number.isFinite(ppi) && ppi > 0) minPpi = minPpi === null ? ppi : Math.min(minPpi, ppi); else unresolved++;
+  };
+  const img = (a: unknown) => a as { width?: number; height?: number } | undefined;
   for (let i = 0; i < ops.fnArray.length; i++) {
     const fn = ops.fnArray[i], args = ops.argsArray[i] as unknown[];
     if (fn === O.save) stack.push(ctm);
@@ -297,19 +449,12 @@ async function opStats(page: pdfjs.PDFPageProxy): Promise<{ images: number; path
     else if (fn === O.paintFormXObjectBegin) { stack.push(ctm); const m = args[0] as number[] | null; if (m) ctm = mul(m, ctm); }
     else if (fn === O.paintFormXObjectEnd) ctm = stack.pop() ?? [1, 0, 0, 1, 0, 0];
     else if (fn === O.constructPath) paths++;
-    else if (fn === O.paintImageXObject || fn === O.paintInlineImageXObject || fn === O.paintImageXObjectRepeat) {
-      images++;
-      let pxW: number | undefined;
-      if (fn === O.paintImageXObject) pxW = args[1] as number;
-      else if (fn === O.paintInlineImageXObject) pxW = (args[0] as { width?: number })?.width;
-      const placedPt = Math.hypot(ctm[0], ctm[1]);
-      if (pxW && placedPt > 0) {
-        const ppi = pxW / (placedPt / 72);
-        if (Number.isFinite(ppi)) minPpi = minPpi === null ? ppi : Math.min(minPpi, ppi);
-      }
-    }
+    else if (fn === O.paintImageXObject) place(args[1], args[2]);
+    else if (fn === O.paintInlineImageXObject || fn === O.paintImageMaskXObject) place(img(args[0])?.width, img(args[0])?.height); // stencils are raster too (Codex R3-3)
+    else if (fn === O.paintImageXObjectRepeat || fn === O.paintImageMaskXObjectRepeat || fn === O.paintImageMaskXObjectGroup || fn === O.paintInlineImageXObjectGroup) { images++; unresolved++; }
   }
-  return { images, paths, minPpi: minPpi === null ? null : Math.round(minPpi) };
+  // One unmeasurable image makes the page's resolution unknown, not the best of the rest.
+  return { images, paths, minPpi: minPpi === null || unresolved ? null : Math.round(minPpi) };
 }
 
 export async function renderPdfPage(bytes: Uint8Array, opts: { ppi?: number } = {}): Promise<Rendered & { images: number; paths: number; minPpi: number | null }> {
@@ -365,19 +510,24 @@ async function inspectUnchecked(bytes: Uint8Array): Promise<{ inspection: Inspec
 
   if (kind === 'pdf') {
     const s = await pdfStructure(bytes);
-    const r = await renderPdfPage(bytes);
-    const art = s.boxes!.trim ?? s.boxes!.crop ?? s.boxes!.media;
-    const sizeSource = s.boxes!.trim ? 'trimbox' : s.boxes!.crop ? 'cropbox' : 'mediabox';
+    const b = s.boxes!;
+    const art = b.trim ?? b.crop ?? b.media;
+    const sizeSource = b.trim ? 'trimbox' : b.crop ? 'cropbox' : 'mediabox';
     let widthMm = art.w, heightMm = art.h;
     if (s.rotation === 90 || s.rotation === 270) [widthMm, heightMm] = [heightMm, widthMm];
+    // Before rendering, and for every box, not only the one that sets the size (Codex R3-14).
     if (Math.max(widthMm, heightMm) > MAX_SIDE_MM) throw new Rejected('too-large', 'The page is larger than 5 m.');
+    if (Math.max(...[b.media, b.crop, b.bleed].flatMap((x) => (x ? [x.w, x.h] : [])))> MAX_PAGE_MM) throw new Rejected('too-large', 'A page box is larger than 5 m.');
+    const r = await renderPdfPage(bytes);
     if (s.pages > 1) warnings.push(`The PDF has ${s.pages} pages; only page 1 is inspected.`);
     if (r.images > 0 && r.minPpi === null) warnings.push('An image is placed with a transform RollCue cannot resolve; its resolution is unknown.');
+    const frame = b.crop ?? b.media;
     return {
       inspection: {
         kind, ...s, widthMm: round2(widthMm), heightMm: round2(heightMm), sizeSource,
         pixels: null, densityPpi: r.minPpi, imageCount: r.images, pathOps: r.paths,
         mask: analyseMask(r.rgba, r.w, r.h), renderPpi: round2(r.ppi), warnings,
+        trimEdgeTouch: b.trim && !s.rotation ? outlineCover(r, frame, b.trim) : null,
       },
       render: r,
     };
@@ -393,11 +543,23 @@ async function inspectUnchecked(bytes: Uint8Array): Promise<{ inspection: Inspec
     inspection: {
       kind, pages: 1, widthMm: widthMm && round2(widthMm), heightMm: heightMm && round2(heightMm),
       sizeSource: meta.ppi ? 'raster-density' : 'unknown', boxes: null, bleedMm: null, rotation: 0,
-      pixels: { w: meta.w, h: meta.h }, densityPpi: meta.ppi, imageCount: 1, pathOps: 0, spots: [], cut: null,
-      mask: analyseMask(r.rgba, r.w, r.h), renderPpi: round2(r.ppi), warnings,
+      pixels: { w: meta.w, h: meta.h }, densityPpi: meta.ppi, imageCount: 1, pathOps: 0, spots: [], cut: null, printableAnnots: 0,
+      mask: analyseMask(r.rgba, r.w, r.h), renderPpi: round2(r.ppi), warnings, trimEdgeTouch: null,
     },
     render: r,
   };
+}
+
+/** Share of the `inner` box outline (mm, PDF space) that is opaque in a render of `frame`. */
+export function outlineCover(r: Pick<Rendered, 'rgba' | 'w' | 'h' | 'ppi'>, frame: Box, inner: Box): number {
+  const k = r.ppi / 25.4;
+  const x0 = Math.round((inner.x - frame.x) * k), x1 = Math.round((inner.x + inner.w - frame.x) * k) - 1;
+  const y0 = Math.round((frame.y + frame.h - inner.y - inner.h) * k), y1 = Math.round((frame.y + frame.h - inner.y) * k) - 1;
+  let n = 0, o = 0;
+  const at = (x: number, y: number) => { if (x < 0 || y < 0 || x >= r.w || y >= r.h) return; n++; if (r.rgba[(y * r.w + x) * 4 + 3] > 127) o++; };
+  for (let x = x0; x <= x1; x++) { at(x, y0); at(x, y1); }
+  for (let y = y0 + 1; y < y1; y++) { at(x0, y); at(x1, y); }
+  return n ? round2(o / n) : 0;
 }
 
 export const round2 = (v: number) => Math.round(v * 100) / 100;

@@ -30,6 +30,7 @@ The hook exists only when the server starts with `RC_TEST_HOOKS=1`. Production d
 | Confident wrong intent | Flagged as thin evidence; one-step correction; superseded proposal can't be approved. | `preflight.test.ts`, `e2e` "wrong guess…" |
 | Not enough evidence to choose | Abstains and asks with a choice. | `preflight.test.ts` "inference abstains…" |
 | Oversized or rotated page, missing bleed, misnamed/filled/unneeded cut path | Refused, returned or warned. Never silently "fixed" by guessing. | `preflight.test.ts` |
+| Custom UserUnit, rotated JPEG (EXIF), multi-page PDF, printable annotations, a cut hidden in a pattern or open, a stencil image, a fill that would cut off-page | Refused or returned with the reason; verification fails any cut that is open, off the page or miscounted (Codex R3) | `preflight-r3.test.ts` |
 | Artwork too soft for the ordered size | A return notice is prepared instead of a blurry print. | `api.test.ts`, e2e "return path…" |
 | Page reload in the middle of work | All state is on the server; the correction and memory are still there. | e2e "refresh keeps the work…" |
 
