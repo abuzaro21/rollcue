@@ -135,7 +135,8 @@ export function createApp(o: AppOpts) {
       const salt = ((globalThis as Record<string, unknown>).__rcSalt ??= randomBytes(16)) as Buffer;
       const hh = (s: string | undefined) => (s ? createHmac('sha256', salt).update(s).digest('hex').slice(0, 8) : '-');
       const xff = String(req.headers['x-forwarded-for'] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-      console.log('[ipdebug]', JSON.stringify({ pid: process.pid, up: Math.round(process.uptime()), n: xff.length, xff: xff.map(hh), sock: hh(req.socket.remoteAddress), key: hh(ip) }));
+      const [{ rows }] = await svc.db.q<{ rows: number }>('select count(*)::int as rows from sessions');
+      console.log('[ipdebug]', JSON.stringify({ rows, pid: process.pid, up: Math.round(process.uptime()), n: xff.length, xff: xff.map(hh), sock: hh(req.socket.remoteAddress), key: hh(ip) }));
     }
     if (!general.take(ip)) throw new HttpError(429, 'rate-limited', 'Too many requests. Wait a moment.');
     const mutating = m !== 'GET' && m !== 'HEAD';
