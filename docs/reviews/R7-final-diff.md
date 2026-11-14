@@ -34,12 +34,31 @@ Server findings have a regression test in [`test/api-r7.test.ts`](../../test/api
 - **Re-planning after a session-wide change is not admission-limited.** Those tasks hold a job ID, not a file, and the change limit bounds how often they can be triggered.
 - Codex did not check browser runs, live Postgres, the proxy, Docker or current advisories. The browser suite was re-run here (40/40). The rest is covered by clean-clone CI and by live verification after deployment.
 
+## R7b: focused check of the R7 fixes
+
+A blocker had been fixed after the last scheduled review, so Codex checked those fixes once more.
+
+- **Reviewer:** Codex CLI, model `gpt-6.1-sol` (from the run log), sandbox `read-only`, reasoning effort `high`. Session `01a1dad2-3cc2-79f0-8514-a7cb02253639`.
+- **Reviewed range:** `2ca15c5..c64233a` only. Brief: [R7b-fix-check.prompt.md](R7b-fix-check.prompt.md).
+- **Assessment of R7:** R7-4, R7-6, R7-7, R7-8 and R7-9 fixed. R7-10's counts were corrected, and the Ghostscript evidence was correctly marked pending. R7-1, R7-2 and R7-3 were only partly fixed, and R7-5 lacked an explanation on the card.
+
+> The R7 repairs contain real improvements, but the decompression bypass, permanent admission leak and falsely verified cut still prevent a v1.0.0 release of this free public demo.
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| R7b-1 | **blocker** | The pre-pass ended each stream body at the first literal `endstream`. A valid Flate stream whose first stored block contained `%endstream` hid 80 MB of expansion; its correct `/Length` let parsers decode all of it. | Each body is inflated from its start to the end of the file, so zlib's own end marker bounds it. Neither a literal `endstream` nor a `/Length` changes what is counted. Test: Codex's fixture (stored block with `%endstream`, then 80 MB of compressed spaces) is refused. |
+| R7b-2 | major | An upload whose client left while its session was being looked up never released its capacity slot: `readBody` waited for a `close` event that had already fired. Eight such requests left the service refusing all new work. | `readBody` rejects at once when the request is already destroyed or aborted, and the slot is returned. Test: eight uploads abandoned during the session lookup, then a sample job is accepted. |
+| R7b-3 | major | Malformed colour operands still claimed a cut. A name operand was dropped (`0 1 /P SCN`), and a missing tint defaulted to 1 (`0 SCN` on two colourants). Through the service such a file was released with a "kept" cut. | A colour needs exactly one finite number per colourant. Anything else paints no colourant, so a malformed colour can never claim a cut. Test: both sequences find no CutContour, and a well-formed one still does. |
+| R7b-4 | minor | A job closed by the change limit showed only "Rejected", hiding the stored reason and the instruction to upload again. | A closed card shows the stored reason. No browser test: reaching the limit needs database access that the browser tests do not have. The change is a single conditional line in `card.tsx`. |
+
+Separately, the clean-clone CI run on `c64233a` (not Codex) showed that the R6 session gate had broken the Docker smoke test: its `curl` to `/api/session` had no `x-rollcue` header. That run stopped there and did not print "ALL STAGES PASSED". The smoke script now sends the header.
+
 ## Status
 
-Totals after the fixes:
-- 84/84 unit tests (7 new, 1 strengthened);
+Totals after the R7 and R7b fixes:
+- 87/87 unit tests (10 new, 1 strengthened);
 - 40/40 browser runs (1 new test, on desktop and mobile);
 - 7/7 sample artifacts valid;
 - evaluation re-run, with every figure unchanged.
 
-These fixes were made **after** R7, the last scheduled review, and **have not been reviewed by Codex**. No claim in this repository says Codex approved them.
+The R7b fixes were made **after** the last Codex review and **have not been reviewed by Codex**. No claim in this repository says Codex approved them.

@@ -264,6 +264,13 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
     if (family === '/DeviceN') { const l = arr.lookup(1); return l instanceof PDFArray ? l.asArray().map((n) => decodeName(doc.context.lookup(n)?.toString())) : null; }
     return null;
   };
+  // Exactly one finite number per colourant; anything else paints no colourant, so a malformed colour can never
+  // claim a cut path (Codex R7b-3).
+  const tints = (ops: string[], cs: string[] | null, prev: number[]) => {
+    if (!cs) return prev;
+    const v = ops.map(Number);
+    return v.length === cs.length && v.every(Number.isFinite) ? v : cs.map(() => 0);
+  };
   const resolveCs = (res: PDFDict | undefined, name: string) => name === 'Pattern' ? PATTERN : /^Device|^Cal|^Lab$/.test(name) ? null : colourants(sub(res, 'ColorSpace', name));
   let tokens = 0, inlinePixels = 0;
   const onStack = new Set<PDFStream>();
@@ -328,8 +335,8 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
         case 'cm': if (ops.length >= 6) gs.ctm = mul([num(6), num(5), num(4), num(3), num(2), num(1)], gs.ctm); break;
         case 'CS': gs.sCs = resolveCs(res, lastName()); gs.sTint = []; gs.sPat = null; break;
         case 'cs': gs.fCs = resolveCs(res, lastName()); gs.fTint = []; gs.fPat = null; break;
-        case 'SC': case 'SCN': if (gs.sCs === PATTERN) gs.sPat = lastName(); else { const v = ops.filter((o) => !o.startsWith('/')).map(Number); if (v.length) gs.sTint = v; } break;
-        case 'sc': case 'scn': if (gs.fCs === PATTERN) gs.fPat = lastName(); else { const v = ops.filter((o) => !o.startsWith('/')).map(Number); if (v.length) gs.fTint = v; } break;
+        case 'SC': case 'SCN': if (gs.sCs === PATTERN) gs.sPat = lastName(); else gs.sTint = tints(ops, gs.sCs, gs.sTint); break;
+        case 'sc': case 'scn': if (gs.fCs === PATTERN) gs.fPat = lastName(); else gs.fTint = tints(ops, gs.fCs, gs.fTint); break;
         case 'G': case 'RG': case 'K': gs.sCs = null; break;
         case 'g': case 'rg': case 'k': gs.fCs = null; break;
         case 'm': path.push({ pts: [pt(num(2), num(1))], segs: 0, closed: false }); break;
@@ -401,19 +408,18 @@ export async function pdfInflateBudget(bytes: Uint8Array): Promise<{ image: numb
   for (let m; (m = re.exec(text)); ) {
     if (text.slice(Math.max(0, m.index - 3), m.index) === 'end') continue;
     const start = m.index + m[0].length;
-    const end = text.indexOf('endstream', start);
-    if (end < 0) break;
     const dict = text.slice(Math.max(0, m.index - 2048), m.index);
     const o = dict.lastIndexOf(' obj'), own = o >= 0 ? dict.slice(o) : dict; // this stream's dictionary, roughly
     const filter = /\/Filter\s*(\[[^\]]*\]|\/[^\s/<>[\]]+)/.exec(own)?.[1] ?? '';
     checkFilters(filter.match(/\/[^\s/<>[\]]+/g) ?? []);
-    re.lastIndex = end;
     // Any valid zlib header, not only the common 0x78 one: a small window still inflates (Codex R7-1).
     if ((bytes[start] & 0x0f) !== 8 || ((bytes[start] << 8) | bytes[start + 1]) % 31 !== 0) continue; // not a zlib body
     const image = /\/Subtype\s*\/Image\b/.test(own);
     const cap = image ? MAX_INFLATE_IMAGE : MAX_INFLATE_OTHER;
     const key = image ? 'image' : 'other';
-    total[key] += await inflatedSize(bytes.subarray(start, end), cap - total[key]);
+    // Inflate to the end of the file: zlib's own end marker bounds the body, so neither a literal `endstream` inside the
+    // data nor a /Length can hide expansion from this count (Codex R7b-1).
+    total[key] += await inflatedSize(bytes.subarray(start), cap - total[key]);
     if (total[key] > cap) throw new Rejected('too-large', 'The PDF decompresses to far more data than a print file needs.');
   }
   return total;

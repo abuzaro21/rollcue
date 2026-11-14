@@ -1,7 +1,8 @@
 // Regression tests for Codex review R7 (final diff). Each failed on 2ca15c5 and passes after the fix.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { deflateSync } from 'node:zlib';
+import { deflateSync, deflateRawSync } from 'node:zlib';
+import http from 'node:http';
 import { createCanvas } from '@napi-rs/canvas';
 import { PDFDocument, PDFName } from 'pdf-lib';
 import { start } from '../src/main.ts';
@@ -144,4 +145,57 @@ test('R7-7 image objects and inline images share one pixel budget', async () => 
     contents(d, Buffer.from(`q BI /W ${side} /H ${side} /CS /G /BPC 8 ID x EI Q`));
   });
   await rejects(pdfStructure(file), 'too-large');
+});
+
+// ---------- R7b: focused check of the R7 fixes ----------
+
+test('R7b-1 a literal endstream inside compressed data does not hide its expansion', async () => {
+  const head = Buffer.from('%endstream\n');
+  const stored = Buffer.concat([Buffer.from([0x78, 0x01, 0x00, head.length, 0, ~head.length & 0xff, 0xff]), head]); // zlib header, then a stored block
+  const bulk = Buffer.alloc(80 * 1024 * 1024, 0x20);
+  let a = 1, b = 0;
+  for (const buf of [head, bulk]) for (let i = 0; i < buf.length; i++) { a = (a + buf[i]) % 65521; b = (b + a) % 65521; }
+  const adler = Buffer.alloc(4); adler.writeUInt32BE(((b << 16) | a) >>> 0);
+  const z = Buffer.concat([stored, deflateRawSync(bulk), adler]);
+  const bomb = await pdfWith((d) => contents(d, z, { Filter: 'FlateDecode' }));
+  await rejects(pdfStructure(bomb), 'too-large');
+});
+
+test('R7b-2 a client that leaves before its upload is read gives its slot back', async () => {
+  const c = await fresh();
+  const s = svc(), session = s.session.bind(s);
+  let open!: () => void, waiting = 0;
+  const gate = new Promise<void>((ok) => { open = ok; });
+  s.session = (async (...a: Parameters<typeof session>) => { waiting++; await gate; return session(...a); }) as typeof s.session;
+  const sid = (await s.db.q<{ id: string }>('select id from sessions order by created_at desc limit 1'))[0].id; // the session fresh() just made
+  try {
+    const reqs = Array.from({ length: 8 }, () => {
+      const r = http.request(`${base}/api/jobs`, { method: 'POST', headers: { cookie: `rc_sid=${sid}`, 'x-rollcue': '1', 'content-length': '1000' } });
+      r.on('error', () => undefined);
+      r.write(Buffer.alloc(10));
+      return r;
+    });
+    while (waiting < 8) await new Promise((ok) => setTimeout(ok, 10));
+    for (const r of reqs) r.destroy();
+    await new Promise((ok) => setTimeout(ok, 100));
+  } finally { open(); s.session = session; }
+  await new Promise((ok) => setTimeout(ok, 300));
+  assert.equal(s.pool.backlog, 0);
+  const r = await c.post('/api/samples/market-stickers');
+  assert.equal(r.status, 201, 'all eight slots came back');
+  await s.idle();
+});
+
+test('R7b-3 malformed colour operands never paint a cut', async () => {
+  const cutFile = (ops: string) => pdfWith((d) => {
+    const fn = d.context.register(d.context.obj({ FunctionType: 2, Domain: [0, 1], C0: [0, 0, 0, 0], C1: [0, 1, 0, 0], N: 1 }));
+    const cs = d.context.obj([PDFName.of('DeviceN'), [PDFName.of('Varnish'), PDFName.of('CutContour')], PDFName.of('DeviceCMYK'), fn]);
+    d.getPage(0).node.set(PDFName.of('Resources'), d.context.obj({ ColorSpace: { CS0: cs } }));
+    contents(d, Buffer.from(`/CS0 CS ${ops} 1 w 20 20 160 160 re S`));
+  });
+  assert.equal((await pdfStructure(await cutFile('0 1 SCN'))).cut?.stroked, true, 'control: a well-formed CutContour tint is found');
+  for (const ops of ['0 0 SCN 0 1 /P SCN', '0 SCN']) {
+    const cut = (await pdfStructure(await cutFile(ops))).cut;
+    assert.ok(!(cut?.name === 'CutContour' && cut.stroked), ops);
+  }
 });

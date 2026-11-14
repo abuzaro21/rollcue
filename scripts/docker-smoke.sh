@@ -8,9 +8,9 @@ trap 'docker logs rc-ci | tail -20; docker rm -f rc-ci >/dev/null; rm -f "${jar:
 for _ in $(seq 1 60); do curl -sf http://127.0.0.1:3399/healthz >/dev/null && break; sleep 1; done
 curl -sf http://127.0.0.1:3399/healthz
 jar=$(mktemp -p .)
-curl -sf -c "$jar" http://127.0.0.1:3399/api/session >/dev/null
+curl -sf -H "x-rollcue: 1" -c "$jar" http://127.0.0.1:3399/api/session >/dev/null
 for _ in $(seq 1 60); do
-  n=$(curl -sf -b "$jar" http://127.0.0.1:3399/api/jobs | grep -o "\"status\":\"ready\"" | wc -l || true)
+  n=$(curl -sf -H "x-rollcue: 1" -b "$jar" http://127.0.0.1:3399/api/jobs | grep -o "\"status\":\"ready\"" | wc -l || true)
   [ "$n" -ge 4 ] && break; sleep 1
 done
 echo "ready jobs: $n"; [ "$n" -ge 4 ]

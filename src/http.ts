@@ -52,6 +52,8 @@ export function createApp(o: AppOpts) {
   let inflight = 0;
 
   const readBody = (req: http.IncomingMessage, limit: number) => new Promise<Buffer>((resolve, reject) => {
+    // A client that left while the request waited has already fired 'close'; waiting for it again would never settle (Codex R7b-2).
+    if (req.destroyed || req.readableAborted) { reject(new HttpError(400, 'aborted', 'The upload was interrupted.')); return; }
     const len = Number(req.headers['content-length'] ?? 0);
     if (len > limit) { reject(new HttpError(413, 'too-large', `Body larger than ${Math.round(limit / 1024)} KB.`)); req.resume(); return; }
     if (inflight + len > INFLIGHT_BODY_BYTES) { reject(new HttpError(503, 'busy', 'RollCue is busy receiving other files. Try again in a minute.')); req.resume(); return; }

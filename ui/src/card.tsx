@@ -326,6 +326,7 @@ function Closed({ job, act }: { job: JobView; act: Act }) {
     <section className="card">
       <Meta job={job} />
       <h2 className="headline">Rejected</h2>
+      {job.error && <p className="found">{job.error}</p>}{/* why RollCue closed it, e.g. the change limit (Codex R7b-4) */}
       <p className="found">Nothing was prepared for production. The original file is unchanged.</p>
       <div className="approve">{act.next && <button type="button" className="primary" onClick={act.next}>Next job</button>}</div>
       <Evidence job={job} />
