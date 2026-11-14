@@ -108,7 +108,7 @@ export function createApp(o: AppOpts) {
     switch (route) {
       case 'GET /session': {
         const { rows } = await svc.memory(sid);
-        return send(res, 200, { roll: sess.roll, samples: (await svc.samples()).map(({ id, title, story }) => ({ id, title, story })), jobs: await svc.list(sid), corrections: rows.map((r) => ({ jobId: r.job_id, filename: r.filename, from: r.from_intent, to: r.intent, at: r.created_at })), testHooks: !!o.testHooks });
+        return send(res, 200, { roll: sess.roll, samples: (await svc.samples()).map(({ id, title, story, context }) => ({ id, title, story, context })), jobs: await svc.list(sid), corrections: rows.map((r) => ({ jobId: r.job_id, filename: r.filename, from: r.from_intent, to: r.intent, at: r.created_at })), testHooks: !!o.testHooks });
       }
       case 'GET /jobs': return send(res, 200, await svc.list(sid));
       case 'POST /jobs': {

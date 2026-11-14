@@ -37,7 +37,7 @@ Thin evidence does not change the reading. It changes the chip to "thin evidence
 
 ## Correction memory
 
-When the operator corrects an intent, the job's feature vector and the corrected intent are stored for the session. For each new job, remembered corrections vote through a similarity kernel: cosine similarity of standardised features, τ = 0.08, strength β = 6, ignored below 0.05 similarity. A near-duplicate (similarity ≥ 0.9) overrides the model with a boost of 40 logits, because the operator has already answered that question. The frozen model's weights never change. Details and measurements: [WRONG-GUESS-RECOVERY.md](WRONG-GUESS-RECOVERY.md).
+When the operator corrects an intent, the job's feature vector and the corrected intent are stored for the session. For each new job, remembered corrections vote through a similarity kernel: similarity = exp(−mean squared difference of the standardised features ÷ τ), τ = 0.08, strength β = 6, ignored below 0.05 similarity. A near-duplicate (similarity ≥ 0.9) overrides the model with a boost of 40 logits, because the operator has already answered that question. The frozen model's weights never change. Details and measurements: [WRONG-GUESS-RECOVERY.md](WRONG-GUESS-RECOVERY.md).
 
 ## What decides production, and what does not
 

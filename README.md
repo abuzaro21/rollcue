@@ -74,7 +74,7 @@ Environment: `PORT`, `DATABASE_URL` (Postgres; otherwise PGlite in `RC_DATA_DIR`
 
 ## Limits, stated plainly
 
-- Four intents only. Packaging, dielines and multi-up imposition are out of scope; RollCue abstains or returns them.
+- Four intents only. A job whose notes or filename mention packaging, cartons or dielines is returned as out of scope unless the operator picks an intent. Other unsupported work (multi-up imposition, for example) is not detected and may be read as one of the four.
 - The model is trained on synthetic files that RollCue generates and then inspects with the same code as uploads. It has not been measured on real customer files.
 - "Release" writes a ticket to this demo's queue. RollCue does not print, cut, or send anything.
 

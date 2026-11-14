@@ -20,7 +20,7 @@ Steps 1–8 are an end-to-end browser test: `e2e/rollcue.spec.ts` "wrong guess: 
 
 ## Why the memory does not spread
 
-The deployed model is frozen. A correction does not change its weights. It adds a remembered example that votes only for jobs that look like it (cosine similarity over standardised features, kernel temperature 0.08). Below a similarity of 0.05 it has no effect. At 0.9 or above, the job is a near-duplicate of one the operator already answered, and the operator's answer wins.
+The deployed model is frozen. A correction does not change its weights. It adds a remembered example that votes only for jobs that look like it (similarity = exp(−mean squared difference of the standardised features ÷ τ), with τ = 0.08). Below a similarity of 0.05 it has no effect. At 0.9 or above, the job is a near-duplicate of one the operator already answered, and the operator's answer wins.
 
 Measured over every wrong prediction in the held-out set:
 

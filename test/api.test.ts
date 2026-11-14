@@ -196,6 +196,27 @@ test('approval after the job changed is refused (intake edited under a prepared 
   assert.ok(now.events.some((e: any) => e.type === 'approval-refused'));
 });
 
+test('"Use RollCue\'s reading again" withdraws the correction, so memory no longer answers for the job (Codex R1-5)', async () => {
+  const c = client();
+  await c.get('/api/session');
+  await app.service.idle();
+  const v = await jobBySample(c, 'stickers-final');
+  const fixed = await c.post(`/api/jobs/${v.id}/decide`, { revision: v.revision, params: { intent: 'poster' } });
+  assert.equal(fixed.status, 200);
+  await app.service.idle();
+  assert.equal((await c.get('/api/session')).body.corrections.length, 1);
+  const cur = (await c.get(`/api/jobs/${v.id}`)).body;
+  const back = await c.post(`/api/jobs/${v.id}/decide`, { revision: cur.revision, params: { intent: null } });
+  assert.equal(back.status, 200);
+  await app.service.idle();
+  const after = (await c.get(`/api/jobs/${v.id}`)).body;
+  assert.equal(after.plan.intent, 'sticker');
+  assert.equal(after.plan.intentSource, 'model');
+  assert.equal(after.prediction.memory.length, 0);
+  assert.equal((await c.get('/api/session')).body.corrections.length, 0);
+  assert.ok(after.events.some((e: any) => e.type === 'correction-withdrawn'));
+});
+
 test('a proposal prepared under an older policy or model version cannot be approved; a tampered artifact neither', async () => {
   const id = (await op.post('/api/samples/honey-labels')).body.id;
   await app.service.idle();

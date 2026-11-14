@@ -78,6 +78,8 @@ export type Prediction = {
   /** Corrected jobs this one resembles; their pull is already included in probs. */
   memory: MemoryMatch[];
   probs: Record<Intent, number>;
+  /** The frozen model alone, before any correction memory, so the UI never presents memory as independent confirmation. */
+  modelProbs: Record<Intent, number>;
   ranked: Intent[];
   top: Intent;
   pTop: number;
@@ -94,7 +96,9 @@ export type Prediction = {
 export function predict(m: ModelFile, x: number[], mem?: Memory): Prediction {
   const z = standardise(m, x);
   const { boost, matches } = memoryBoost(m, z, mem);
-  const p = softmax(logits(m, z).map((l, k) => l + boost[k] * m.temperature), m.temperature);
+  const base = logits(m, z);
+  const p = softmax(base.map((l, k) => l + boost[k] * m.temperature), m.temperature);
+  const p0 = softmax(base, m.temperature);
   const order = p.map((v, k) => [v, k] as const).sort((u, v) => v[0] - u[0]).map(([, k]) => k);
   const [t, s] = order;
   const w = (k: number, j: number) => m.W[k][j];
@@ -112,6 +116,7 @@ export function predict(m: ModelFile, x: number[], mem?: Memory): Prediction {
     memoryVersion: mem?.version ?? 'none',
     memory: matches,
     probs: Object.fromEntries(m.classes.map((c, k) => [c, round(p[k], 4)])) as Record<Intent, number>,
+    modelProbs: Object.fromEntries(m.classes.map((c, k) => [c, round(p0[k], 4)])) as Record<Intent, number>,
     ranked: order.map((k) => m.classes[k]),
     top: m.classes[t],
     pTop: round(pTop, 4),

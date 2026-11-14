@@ -125,6 +125,31 @@ test('session memory: a correction fixes near-duplicates and leaves unrelated jo
   const before = predict(model, unrelated.x), after = predict(model, unrelated.x, mem);
   assert.equal(after.top, before.top);
   assert.equal(after.memory.length, 0);
+  // Memory never masquerades as the model: the model-alone probabilities stay with the prediction (Codex R1-8).
+  const remembered = predict(model, wrong.x, mem);
+  assert.equal(remembered.probs.poster > 0.9, true);
+  assert.equal(remembered.modelProbs.sticker > 0.9, true);
+});
+
+test('unsupported work (packaging, dielines) is stopped by policy, not read as the nearest intent (Codex R1-6)', async () => {
+  const r = await run({ format: 'pdf', shape: 'blob', wMm: 210, hMm: 297, opaqueBg: false }, intake({ filename: 'box.pdf', qty: 500, notes: 'packaging carton with dieline' }));
+  assert.equal(r.plan.decision.kind, 'return');
+  assert.equal(r.plan.decision.headline, 'Outside what RollCue prepares');
+  assert.equal(r.plan.intent, null);
+  assert.equal(check(r.plan, 'scope'), 'fail');
+  const over = plan(r.inspection, intake({ filename: 'box.pdf', qty: 500, notes: 'packaging carton with dieline' }), r.pred, { intent: 'sticker' });
+  assert.equal(over.intent, 'sticker', 'the operator can still override');
+  assert.notEqual(over.decision.kind, 'intent');
+});
+
+test('an unresolved check is never reported as "every check passes" (Codex R1-11)', async () => {
+  const r = await run({ format: 'pdf', shape: 'rect', wMm: 100, hMm: 60, opaqueBg: true, cutSpot: { name: 'CutContour' } }, intake({ filename: 'lbl.pdf', qty: 2000, media: 'label_stock', notes: 'jar labels' }));
+  const ins = { ...r.inspection, imageCount: 1, densityPpi: null, pixels: null };
+  const p = plan(ins, intake({ filename: 'lbl.pdf', qty: 2000, media: 'label_stock', notes: 'jar labels' }), r.pred, {});
+  assert.equal(check(p, 'resolution'), 'unknown');
+  assert.equal(p.decision.kind, 'release');
+  assert.doesNotMatch(p.decision.found, /Every check passes/);
+  assert.ok(p.decision.kind === 'release' && p.decision.warnings.some((w) => w.startsWith('Not confirmed: resolution')));
 });
 
 test('no hardware, network or process control anywhere in the shipped service', () => {

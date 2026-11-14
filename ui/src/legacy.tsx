@@ -19,6 +19,9 @@ function Legacy() {
   const [msg, setMsg] = useState<string>('');
   const [ran, setRan] = useState(false);
   const [generated, setGenerated] = useState(false);
+  // A conventional tool will not output until the operator has done each step (Codex R1-3: no shortcut to RollCue's file).
+  const [saved, setSaved] = useState(false);
+  const [cutSet, setCutSet] = useState(false);
   const [product, setProduct] = useState<string>('');
   const [cutMethod, setCutMethod] = useState('');
   const [offset, setOffset] = useState('');
@@ -38,7 +41,7 @@ function Legacy() {
 
   const go = (t: Tab) => { if (t !== tab) counter.screen(); setTab(t); };
   async function open(id: string) {
-    setRan(false); setGenerated(false); setProduct(''); setCutMethod(''); setOffset(''); setMsg('Loading job…');
+    setRan(false); setGenerated(false); setSaved(false); setCutSet(false); setProduct(''); setCutMethod(''); setOffset(''); setMsg('Loading job…');
     await load(id); setMsg(''); counter.reset(); go('Job ticket');
   }
   const guard = async (fn: () => Promise<void>) => {
@@ -50,17 +53,23 @@ function Legacy() {
     if (!product) { setMsg('Select a product type.'); return; }
     setMsg('Saving…');
     await api.decide(job, { intent: product as Intent }, true);
-    await load(job.id); setRan(false); setGenerated(false); setMsg('Ticket saved.');
+    await load(job.id); setSaved(true); setRan(false); setCutSet(false); setGenerated(false); setMsg('Ticket saved.');
   });
   const applyCut = () => guard(async () => {
     if (!job) return;
     const params: Record<string, unknown> = {};
     if (cutMethod === 'rect') params.rectCut = true;
     if (cutMethod === 'contour' && offset) params.offsetMm = Number(offset);
-    if (!Object.keys(params).length) { setMsg('Nothing to apply.'); return; }
+    if (!cutMethod) { setMsg('Select a cut method.'); return; }
+    if (!Object.keys(params).length) {
+      // keep / none change nothing on the server, so they are only accepted when the prepared output already matches.
+      const built = job.plan?.decision.kind === 'release' ? job.plan.decision.build.cut : cutMethod;
+      if (built !== cutMethod) { setMsg(`Not available for this job: the output uses cut "${built}".`); return; }
+      setCutSet(true); setGenerated(false); setMsg('Cut settings applied.'); return;
+    }
     setMsg('Applying…');
     await api.decide(job, params, true);
-    await load(job.id); setGenerated(false); setMsg('Cut settings applied.');
+    await load(job.id); setCutSet(true); setGenerated(false); setMsg('Cut settings applied.');
   });
   const send = () => guard(async () => {
     if (!job?.proposal) return;
@@ -73,6 +82,7 @@ function Legacy() {
   });
 
   const plan = job?.plan, ins = job?.inspection, p = job?.proposal;
+  const missing = [!saved && 'save the job ticket', !ran && 'run preflight', !cutSet && 'apply cut settings'].filter(Boolean);
   return (
     <div className="lg">
       <header className="lg-bar">
@@ -158,7 +168,8 @@ function Legacy() {
 
         {tab === 'Output' && job && (
           <div>
-            <div className="lg-actions"><button onClick={() => setGenerated(true)} disabled={!p}>Generate output</button></div>
+            <div className="lg-actions"><button onClick={() => setGenerated(true)} disabled={!p || missing.length > 0}>Generate output</button></div>
+            {missing.length > 0 && <p className="lg-missing">Before output: {missing.join(', ')}.</p>}
             {generated && p && (
               <div className="lg-output">
                 {p.kind === 'production' ? <img src={p.previewUrl} alt="Output preview" /> : <p>Policy result: return to customer. A return notice was generated.</p>}

@@ -79,7 +79,7 @@ export function validateIntake(raw: unknown, filename: string): Intake {
 /** Display-only filename: never used as a path. */
 export const cleanName = (s: string) => (s.replace(/[\u0000-\u001f\u007f<>:"/\\|?*]+/g, '_').replace(/^\.+/, '').trim().slice(0, 120) || 'upload');
 
-export type Sample = { id: string; title: string; story: string; file: string; seed?: boolean; intake: Omit<Intake, 'filename'> & { filename?: string } };
+export type Sample = { id: string; title: string; story: string; context?: string; file: string; seed?: boolean; intake: Omit<Intake, 'filename'> & { filename?: string } };
 
 export type ServiceOpts = { db: Db; pool: Pool; model: ModelFile; samplesDir: string; now?: () => Date };
 
@@ -303,6 +303,11 @@ export class Service {
         await q('insert into corrections (session_id, job_id, filename, from_intent, intent, x) values ($1,$2,$3,$4,$5,$6::jsonb)', [sid, jid, job.filename, job.plan?.intent ?? modelTop, params.intent, JSON.stringify(job.features)]);
         await this.#event(q, jid, 'intent-corrected', { from: job.plan?.intent ?? modelTop, to: params.intent, modelPTop: job.prediction?.pTop, remembered: true });
         corrected = true;
+      }
+      if ('intent' in params && !params.intent) {
+        // "Use RollCue's reading again" withdraws this job's correction too; otherwise memory would keep answering for it.
+        const gone = await q('delete from corrections where session_id = $1 and job_id = $2 returning id', [sid, jid]);
+        if (gone.length) { await this.#event(q, jid, 'correction-withdrawn', { count: gone.length }); corrected = true; }
       }
     });
     await this.#replan(jid, { reason: corrected ? 'intent-corrected' : 'operator-decision' });

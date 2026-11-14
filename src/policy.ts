@@ -6,7 +6,10 @@ import type { Inspection } from './inspect.ts';
 import type { Prediction } from './model.ts';
 import { rollLayout, DEFAULT_ROLL, type Layout, type RollSettings } from './layout.ts';
 
-export const POLICY_VERSION = 'rc-policy-1';
+export const POLICY_VERSION = 'rc-policy-2';
+
+/** Work this shop does not prepare on roll media. The model only knows four intents, so this is a hard boundary in policy, not a guess. */
+export const OUT_OF_SCOPE = /\b(packaging|cartons?|die-?lines?|folding box(es)?|tuck box(es)?|gable box(es)?)\b|تغليف|كرتون/i;
 
 export const PPI = {
   sticker: { fail: 150, warn: 240 }, label: { fail: 200, warn: 280 }, poster: { fail: 100, warn: 150 }, banner: { fail: 40, warn: 72 },
@@ -75,6 +78,25 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
   const intentSource = params.intent ? 'operator' : intent ? 'model' : null;
   const checks: PCheck[] = [];
   const add = (id: string, label: string, status: CheckStatus, detail: string) => checks.push({ id, label, status, detail });
+
+  // --- scope: an explicit mention of work RollCue does not prepare stops the model's reading (the operator can override) ---
+  const scopeHit = params.intent ? null : OUT_OF_SCOPE.exec(`${intake.notes} ${intake.filename}`);
+  if (scopeHit) {
+    add('scope', 'Supported work', 'fail', `The job mentions “${scopeHit[0]}”. RollCue prepares stickers, labels, posters and banners only.`);
+    const options: Option[] = [
+      { id: 'send-notice', label: 'Return to customer', detail: 'Approve the prepared notice', recommended: true, params: {} },
+      ...pred.ranked.slice(0, 2).map((k) => ({ id: `intent-${k}`, label: `It is ${INTENT_LABEL[k].toLowerCase()} after all`, detail: 'Prepare it as that job', params: { intent: k } })),
+    ];
+    return {
+      intent: null, intentSource: null, evidence, checks, target: null,
+      decision: {
+        kind: 'return', headline: 'Outside what RollCue prepares', found: checks[0].detail,
+        why: 'Packaging and dielines need a prepress operator. Preparing it as a sticker or a poster would produce the wrong file.',
+        notice: { title: 'Packaging job', lines: ['We received your file for a packaging job.'], ask: 'Our prepress team prepares packaging and dielines by hand and will contact you to confirm the details.' },
+        options,
+      },
+    };
+  }
 
   // --- intent ---
   if (!intent) {
@@ -197,11 +219,13 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
   if (build.cropMarks) changes.push('Add crop marks outside the trim.');
   const warnings = checks.filter((c) => c.status === 'warn' && !['cut', 'scale', 'aspect'].includes(c.id)).map((c) => c.detail);
   if (params.acceptLowRes) warnings.unshift('Operator accepted printing below the resolution floor.');
+  const unresolved = checks.filter((c) => c.status === 'unknown');
+  for (const c of unresolved) warnings.push(`Not confirmed: ${c.label.toLowerCase()}. ${c.detail}`);
 
   const lead = cut === 'contour' ? { h: 'No cut path in the file', f: `This reads as ${INTENT_LABEL[intent].toLowerCase()}, but the file has no CutContour. The cutter would have nothing to follow.`, w: 'A contour from the artwork’s own transparency is ready for review.' }
     : cut === 'rect' ? { h: 'Rectangular cut needed', f: 'The file has no cut path; the artwork is a filled rectangle.', w: 'A rectangle at the trim is the exact outline, so a CutContour there is ready for review.' }
     : scale && Math.abs(scale - 1) > 0.005 ? { h: 'Artwork is not at finished size', f: `The file measures ${size(ins.widthMm!, ins.heightMm!)}; the job asks for ${size(target.w, target.h)}.`, w: 'A production file at the finished size is ready; the art is scaled, not redrawn.' }
-    : { h: 'Ready for production', f: `Every check passes for ${INTENT_LABEL[intent].toLowerCase()}.`, w: 'The production file and job ticket are prepared. Approve to release them to the queue.' };
+    : { h: 'Ready for production', f: unresolved.length ? `No blocking issues for ${INTENT_LABEL[intent].toLowerCase()}, but ${unresolved.length === 1 ? 'one check' : `${unresolved.length} checks`} could not be confirmed (listed below).` : `Every check passes for ${INTENT_LABEL[intent].toLowerCase()}.`, w: 'The production file and job ticket are prepared. Approve to release them to the queue.' };
   const options: Option[] = [];
   if (cut === 'contour') for (const o of [1, 2, 3]) if (o !== build.offsetMm) options.push({ id: `offset-${o}`, label: `${o} mm border`, detail: 'Re-trace the contour', params: { offsetMm: o } });
   if (fit !== 'scale') options.push({ id: `fit-${fit === 'fit' ? 'fill' : 'fit'}`, label: fit === 'fit' ? 'Fill and crop' : 'Fit inside', detail: 'Change how the art meets the size', params: { fit: fit === 'fit' ? 'fill' : 'fit' } });

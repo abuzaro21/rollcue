@@ -27,3 +27,4 @@ body { margin: 0; background: #e6e6e6; color: #1b1b1b; font: 13px/1.4 'Inter Var
 .lg-actions button, .lg-table button { font: inherit; padding: 5px 14px; border: 1px solid #7d7d7d; background: linear-gradient(#fafafa, #dedede); border-radius: 3px; cursor: pointer; }
 .lg-actions button:disabled { opacity: 0.5; cursor: default; }
 .lg-output img { max-width: min(520px, 100%); border: 1px solid #bbb; background: repeating-conic-gradient(#eee 0 25%, #fff 0 50%) 0 0 / 16px 16px; display: block; }
+.lg-missing { color: #7a4b00; margin: 0 0 10px; }

@@ -1,5 +1,5 @@
 {
-  "method": "Playwright drives each surface by the shortest correct path for the same sample job on the same backend, in a fresh session. Clicks, form fields and screen changes are counted as the script performs them. Time includes server work. Legacy is a representative multi-tab preflight built for this comparison, not a real product.",
+  "method": "Playwright drives each surface by the shortest path it allows (legacy will not output until ticket, preflight and cut are done) for the same sample job on the same backend, in a fresh session. Clicks, form fields and screen changes are counted as the script performs them. Time includes server work. Legacy is a representative multi-tab preflight built for this comparison, not a real product.",
   "generatedAt": "2026-11-14",
   "results": {
     "market-stickers": {
@@ -10,7 +10,7 @@
         "decisions": [
           "approve prepared file"
         ],
-        "ms": 2116
+        "ms": 2121
       },
       "legacy": {
         "clicks": 9,
@@ -23,7 +23,7 @@
           "enter offset 2 mm",
           "approve output"
         ],
-        "ms": 1500
+        "ms": 1497
       }
     },
     "stickers-final": {
@@ -35,18 +35,19 @@
           "correct intent → Poster",
           "approve prepared file"
         ],
-        "ms": 3140
+        "ms": 3158
       },
       "legacy": {
-        "clicks": 7,
-        "fields": 1,
-        "screens": 4,
+        "clicks": 9,
+        "fields": 2,
+        "screens": 5,
         "decisions": [
           "choose product type: Poster",
           "read preflight table",
+          "choose cut method: none",
           "approve output"
         ],
-        "ms": 1365
+        "ms": 1430
       }
     }
   }

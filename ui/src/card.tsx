@@ -32,7 +32,7 @@ function Meta({ job }: { job: JobView }) {
   const bits = [i.qty ? `${i.qty.toLocaleString('en-US')} pcs` : 'qty not given', i.media ? MEDIA_LABEL[i.media] : 'media not given', i.reqW && i.reqH ? `ordered ${fmt(i.reqW)} × ${fmt(i.reqH)} mm` : null].filter(Boolean);
   return (
     <header className="card-meta">
-      <span className="file" title={job.filename}>{job.filename}</span>
+      <span className="file" title={job.filename}>{job.filename}{job.sample && <span className="chip sample-tag">sample job</span>}</span>
       <span className="muted">{bits.join(' · ')}</span>
       {i.notes && <q className="notes" dir="auto">{i.notes}</q>}
     </header>
@@ -102,7 +102,7 @@ function NotThis({ job, act, close }: { job: JobView; act: Act; close: () => voi
           <li key={c}>
             <button type="button" className="alt" disabled={act.busy} onClick={() => { close(); act.decide({ intent: c }, `Corrected to ${lower(c)}.`); }}>
               <span className="alt-name">{INTENT_LABEL[c]}</span>
-              <span className="alt-p mono">{prob(pred.probs[c])}</span>
+              <span className="alt-p mono" title="The model alone, before your corrections">{prob((pred.modelProbs ?? pred.probs)[c])}</span>
               <span className="alt-why">{pred.forEach[c].length ? pred.forEach[c].map((e) => e.label).join(' · ') : 'little supporting evidence'}</span>
             </button>
           </li>
@@ -118,7 +118,7 @@ function NotThis({ job, act, close }: { job: JobView; act: Act; close: () => voi
 function optionActive(job: JobView, o: Option, all: Option[]) {
   const params = job.params as Record<string, unknown>;
   const set = all.find((x) => Object.entries(x.params).every(([k, v]) => params[k] === v));
-  return set ? set.id === o.id : !!o.recommended;
+  return set ? set.id === o.id : false; // "suggested" is not "applied": a suggestion stays clickable (Codex R1-4)
 }
 
 function Options({ job, act, options, legend }: { job: JobView; act: Act; options: Option[]; legend: string }) {
@@ -153,6 +153,7 @@ function Decision({ job, act, notice }: { job: JobView; act: Act; notice: ReactN
       {d.kind !== 'intent' && <IntentLine job={job} open={alt} setOpen={setAlt} />}
       {alt && <NotThis job={job} act={act} close={() => setAlt(false)} />}
       {notice}
+      {!choose && p?.status === 'prepared' && <p className="eyebrow">Prepared automatically · waiting for your approval</p>}
       <h2 className="headline">{d.headline}</h2>
       <p className="found">{d.found}</p>
       <p className="why">{d.why}</p>
@@ -216,6 +217,7 @@ function Decision({ job, act, notice }: { job: JobView; act: Act; notice: ReactN
           <p className="binding mono" title={`binding ${p.binding_hash}`}>
             Approves file {short(p.artifact_sha256)} · revision {job.revision} · {p.policy_version}
           </p>
+          <p className="muted small">{d.kind === 'return' ? 'Approving marks the job returned. Nothing is sent.' : 'Releasing adds the file to this demo’s production queue. Nothing is printed, cut or sent.'}</p>
         </div>
       )}
       {choose && <div className="approve"><button type="button" className="quiet" disabled={act.busy} onClick={act.reject}>Reject job</button></div>}
@@ -233,12 +235,18 @@ function Evidence({ job }: { job: JobView }) {
       <summary>Why RollCue thinks this</summary>
       {pred && plan && (
         <div className="ev-block">
-          <h4>Job type</h4>
+          <h4>Job type: the model alone</h4>
           <ul className="probs">
             {INTENTS.map((c) => (
-              <li key={c}><span>{INTENT_LABEL[c]}</span><meter min={0} max={1} value={pred.probs[c]} /><span className="mono">{prob(pred.probs[c])}</span></li>
+              <li key={c}><span>{INTENT_LABEL[c]}</span><meter min={0} max={1} value={(pred.modelProbs ?? pred.probs)[c]} /><span className="mono">{prob((pred.modelProbs ?? pred.probs)[c])}</span></li>
             ))}
           </ul>
+          {pred.memory.length > 0 && (
+            <p className="memory-note">With your corrections in this session: {lower(pred.top)}, {prob(pred.pTop)}. Closest corrected file: <span className="mono">{pred.memory[0].filename}</span>, {pct(pred.memory[0].similarity)} similar.</p>
+          )}
+          {plan.intentSource === 'operator' && plan.intent && (
+            <p className="memory-note">Operator correction applied: {lower(plan.intent)}. The figures above are the model’s own reading, not a confirmation.</p>
+          )}
           {pred.forTop.length > 0 && <p><b>For {lower(pred.top)}:</b> {pred.forTop.map((e) => e.label).join(' · ')}</p>}
           {pred.againstTop.length > 0 && <p><b>Against:</b> {pred.againstTop.map((e) => e.label).join(' · ')}</p>}
           <p className="muted small mono">model {pred.modelVersion} · memory {pred.memoryVersion} · filename share of evidence {pct(plan.evidence.filenameShare)}</p>

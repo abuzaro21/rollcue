@@ -8,7 +8,7 @@ import { predict, type ModelFile } from '../src/model.ts';
 import { plan } from '../src/policy.ts';
 
 type Spec = {
-  id: string; title: string; story: string; seed?: boolean; ext: 'pdf' | 'png' | 'jpg'; file: FileSpec; intake: Omit<Intake, 'filename'> & { filename: string };
+  id: string; title: string; story: string; context?: string; seed?: boolean; ext: 'pdf' | 'png' | 'jpg'; file: FileSpec; intake: Omit<Intake, 'filename'> & { filename: string };
   expect: { decision: 'intent' | 'size' | 'return' | 'release'; truth: Intent; modelTop?: Intent; modelWrong?: boolean; thin?: boolean; cut?: string };
 };
 
@@ -23,6 +23,7 @@ const S: Spec[] = [
   {
     id: 'stickers-final', seed: true, title: 'stickers-final.pdf', ext: 'pdf',
     story: 'Named like a sticker job, but it is one A4 window poster. RollCue leans sticker on thin evidence; correcting it shows recovery.',
+    context: 'On the phone, the customer said this is one A4 window poster.',
     file: { format: 'pdf', shape: 'blob', wMm: 210, hMm: 297, opaqueBg: false, seed: 102 },
     intake: { filename: 'stickers-final.pdf', qty: 1, reqW: null, reqH: null, media: null, notes: '' },
     expect: { decision: 'release', truth: 'poster', modelWrong: true, thin: true },
@@ -74,7 +75,8 @@ for (const s of S) {
   writeFileSync(`samples/${file}`, bytes);
   const { inspection } = await inspect(bytes);
   const intake: Intake = { ...s.intake };
-  const pred = predict(model, featurize(inspection, intake), { items: [], version: 'mem-empty' });
+  const x = featurize(inspection, intake);
+  const pred = predict(model, x, { items: [], version: 'mem-empty' });
   const p = plan(inspection, intake, pred, {});
   const build = p.decision.kind === 'release' ? p.decision.build : null;
   const problems = [

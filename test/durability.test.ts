@@ -8,7 +8,8 @@ import path from 'node:path';
 import { start } from '../src/main.ts';
 
 test('restart preserves pending approvals and resumes interrupted work', async () => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'rc-dur-'));
+  const root = mkdtempSync(path.join(os.tmpdir(), 'rc-dur-'));
+  const dir = path.join(root, 'data', 'pglite'); // missing parents, as in a fresh clone
   let app = await start({ dbDir: dir });
   try {
     let base = `http://127.0.0.1:${app.port}`;
@@ -43,6 +44,6 @@ test('restart preserves pending approvals and resumes interrupted work', async (
     assert.equal(resumed.proposal.status, 'prepared');
   } finally {
     await app.close().catch(() => undefined);
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   }
 });

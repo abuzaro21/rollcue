@@ -5,7 +5,7 @@ export type { JobView, JobSummary };
 
 export type Session = {
   roll: { rollWidthMm: number; sideMarginMm: number };
-  samples: Array<{ id: string; title: string; story: string }>;
+  samples: Array<{ id: string; title: string; story: string; context?: string }>;
   jobs: JobSummary[];
   corrections: Array<{ jobId: string; filename: string; from: string | null; to: string; at: string }>;
   testHooks: boolean;

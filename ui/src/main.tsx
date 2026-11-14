@@ -20,13 +20,20 @@ function App() {
   const [adding, setAdding] = useState(false);
   const [memOpen, setMemOpen] = useState(false);
   const [kick, setKick] = useState(0); // restarts polling after an action leaves the job working
+  const [conn, setConn] = useState<'connecting' | 'ok' | 'down'>('connecting');
+  const curRef = useRef(current);
+  curRef.current = current;
+  // A response for a job the operator has already left must never be shown or acted on (Codex R1-2).
+  const shown = job && job.id === current ? job : null;
 
   const refreshJobs = useCallback(async () => setJobs(await api.jobs()), []);
   const refreshSession = useCallback(async () => { const s = await api.session(); setSession(s); setJobs(s.jobs); return s; }, []);
 
-  useEffect(() => {
-    refreshSession().then((s) => setCurrent((c) => c ?? s.jobs.find((j) => OPEN.has(j.status))?.id ?? s.jobs[0]?.id ?? null)).catch(() => setToast({ text: 'RollCue could not reach its server.', tone: 'error' }));
+  const connect = useCallback(() => {
+    setConn('connecting');
+    refreshSession().then((s) => { setConn('ok'); setCurrent((c) => c ?? s.jobs.find((j) => OPEN.has(j.status))?.id ?? s.jobs[0]?.id ?? null); }).catch(() => setConn('down'));
   }, [refreshSession]);
+  useEffect(connect, [connect]);
 
   // Poll the open job while the server is still working on it; poll the queue while any job is.
   useEffect(() => {
@@ -35,7 +42,7 @@ function App() {
     const tick = async () => {
       try {
         const v = await api.job(current);
-        if (stop) return;
+        if (stop || v.id !== curRef.current) return;
         setJob(v);
         if (isWorking(v)) t = setTimeout(tick, 600);
       } catch { if (!stop) t = setTimeout(tick, 2000); }
@@ -43,7 +50,7 @@ function App() {
     void tick();
     return () => { stop = true; clearTimeout(t); };
   }, [current, kick]);
-  const anyWorking = jobs.some((j) => j.status === 'analysing') || isWorking(job);
+  const anyWorking = jobs.some((j) => j.status === 'analysing') || isWorking(shown);
   useEffect(() => {
     if (!anyWorking) return;
     const t = setInterval(() => void refreshJobs(), 1500);
@@ -55,31 +62,33 @@ function App() {
     setBusy(true);
     try {
       const v = await fn();
-      if (v) { setJob(v); if (isWorking(v)) setKick((k) => k + 1); }
+      if (v && v.id === curRef.current) { setJob(v); if (isWorking(v)) setKick((k) => k + 1); }
       if (ok) setToast({ text: ok, tone: 'ok' });
       await refreshJobs();
     } catch (e) {
       setToast({ text: e instanceof ApiError ? e.message : 'Something went wrong. Nothing was released.', tone: 'error' });
-      if (e instanceof ApiError && e.status === 409 && job) setJob(await api.job(job.id));
+      const id = curRef.current;
+      if (e instanceof ApiError && e.status === 409 && id) { const v = await api.job(id); if (v.id === curRef.current) setJob(v); }
     } finally { setBusy(false); }
   };
 
   const nextOpen = jobs.find((j) => j.id !== current && OPEN.has(j.status));
-  const act: Act | null = job && {
+  const job_ = shown;
+  const act: Act | null = job_ && {
     busy,
     decide: (params, note) => run(async () => {
-      const v = await api.decide(job, params);
+      const v = await api.decide(job_, params);
       if ('intent' in params) await refreshSession();
       return v;
     }, 'intent' in params && params.intent ? `${note} RollCue will read similar files this way for the rest of this session.` : note),
     approve: () => run(async () => {
-      const v = await api.approve(job);
-      if (v.status === 'released' || v.status === 'returned') { void api.metric('decision', job.id, { ...counter.snapshot(), sample: job.sample, outcome: v.status }); counter.reset(); }
+      const v = await api.approve(job_);
+      if (v.status === 'released' || v.status === 'returned') { void api.metric('decision', job_.id, { ...counter.snapshot(), sample: job_.sample, outcome: v.status }); counter.reset(); }
       else setToast({ text: 'Release failed verification. Nothing was released.', tone: 'error' });
       return v;
     }),
-    retry: () => run(() => api.retry(job)),
-    reject: () => run(() => api.reject(job), 'Job rejected. Nothing was prepared for production.'),
+    retry: () => run(() => api.retry(job_)),
+    reject: () => run(() => api.reject(job_), 'Job rejected. Nothing was prepared for production.'),
     next: nextOpen ? () => { counter.screen(); setCurrent(nextOpen.id); } : null,
   };
 
@@ -108,7 +117,7 @@ function App() {
                 <div className="mem-pop" role="dialog" aria-label="Session corrections">
                   <p className="muted small">RollCue uses these to read similar files in this session only. The model itself does not change.</p>
                   <ul>{corrections.map((c) => <li key={c.jobId + c.at}><span className="mono">{c.filename}</span> {c.from ?? '—'} → <b>{c.to}</b></li>)}</ul>
-                  <button type="button" className="quiet" onClick={() => run(async () => { await api.forget(); await refreshSession(); setMemOpen(false); if (job) return api.job(job.id); }, 'Corrections forgotten. Open jobs re-read.')}>Forget them</button>
+                  <button type="button" className="quiet" onClick={() => run(async () => { await api.forget(); await refreshSession(); setMemOpen(false); if (curRef.current) return api.job(curRef.current); }, 'Corrections forgotten. Open jobs re-read.')}>Forget them</button>
                 </div>
               )}
             </div>
@@ -118,11 +127,20 @@ function App() {
       </header>
 
       <main className="work">
-        {job ? (
+        {shown ? (
           <>
-            <section className="stage" aria-label="Working object"><Mat job={job} /></section>
-            <aside className="side">{act && <Card job={job} act={act} notice={null} />}</aside>
+            <section className="stage" aria-label="Working object"><Mat job={shown} /></section>
+            <aside className="side">{act && <Card job={shown} act={act} notice={<DemoContext text={session?.samples.find((s) => s.id === shown.sample)?.context} />} />}</aside>
           </>
+        ) : conn !== 'ok' ? (
+          <section className="arrival" role="status" aria-busy={conn === 'connecting'}>
+            {conn === 'connecting' ? <p>Connecting to RollCue…</p> : <>
+              <p>RollCue could not reach its server. Nothing was changed.</p>
+              <button type="button" className="primary" onClick={connect}>Try again</button>
+            </>}
+          </section>
+        ) : current ? (
+          <section className="arrival" role="status" aria-busy="true"><p>Opening the job…</p></section>
         ) : (
           <Arrival session={session} onPick={() => setAdding(true)} onSample={(id) => run(async () => { const r = await api.sample(id); setCurrent(r.id); })} />
         )}
@@ -133,12 +151,17 @@ function App() {
           onSample={(id) => { setAdding(false); void run(async () => { const r = await api.sample(id); counter.screen(); setCurrent(r.id); }); }}
           onUpload={(file, intake) => { setAdding(false); void run(async () => { const r = await api.upload(file, intake); counter.screen(); setCurrent(r.id); }); }} />
       )}
-      {session?.testHooks && location.hash === '#hooks' && job?.proposal?.status === 'prepared' && (
+      {session?.testHooks && location.hash === '#hooks' && shown?.proposal?.status === 'prepared' && (
         <button type="button" className="test-hook" onClick={() => run(async () => { await api.failNext(); }, 'Next release will fail (test hook).')}>Fail next release</button>
       )}
       <div className={`toast ${toast?.tone ?? ''}`} role="status" aria-live="polite">{toast?.text}</div>
     </div>
   );
+}
+
+/** What the operator knows from outside the file (a phone call, an email). Shown on demo samples only; RollCue never reads it. */
+function DemoContext({ text }: { text?: string }) {
+  return text ? <p className="demo-context" role="note"><b>Demo context, not seen by RollCue.</b> {text}</p> : null;
 }
 
 function Arrival({ session, onPick, onSample }: { session: Session | null; onPick: () => void; onSample: (id: string) => void }) {

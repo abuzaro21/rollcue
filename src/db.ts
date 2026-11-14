@@ -1,5 +1,6 @@
 // One SQL dialect everywhere: real Postgres via `pg` when DATABASE_URL is set, PGlite (Postgres compiled to WASM)
 // otherwise, in memory for tests or in a directory for local runs.
+import { mkdirSync } from 'node:fs';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 
@@ -110,6 +111,7 @@ export async function openDb(opts: { url?: string; dir?: string } = {}): Promise
       close: () => pool.end(),
     };
   } else {
+    if (opts.dir) mkdirSync(opts.dir, { recursive: true }); // a fresh clone has no data/ yet; PGlite will not create parents
     const lite = new PGlite(opts.dir);
     await lite.waitReady;
     // PGlite is a single connection: serialise transactions so concurrent requests cannot interleave statements.

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { createCanvas } from '@napi-rs/canvas';
 
 const ready = async (page: Page) => {
   await expect(page.locator('.headline')).toBeVisible();
@@ -19,6 +20,32 @@ test('first visit: a prepared job and its next decision, no setup', async ({ pag
   await expect(page.locator('path.cut')).toHaveCount(1);
   await expect(page.locator('.changes li').first()).toContainText('CutContour');
   await expect(page.getByRole('button', { name: 'Approve and release' })).toBeEnabled();
+  await expect(page.locator('.eyebrow')).toHaveText('Prepared automatically · waiting for your approval');
+  await expect(page.locator('.card-meta .sample-tag')).toHaveText('sample job');
+});
+
+test('switching jobs never leaves the previous job actionable', async ({ page }) => {
+  await page.goto('/');
+  await ready(page);
+  await openJob(page, /olive-market-sticker/);
+  const honey = await page.locator('.qchip', { hasText: /honey-jar-labels/ }).getAttribute('title');
+  expect(honey).toContain('honey');
+  await page.route('**/api/jobs/*', async (r) => { if (r.request().method() === 'GET') await new Promise((ok) => setTimeout(ok, 1500)); await r.continue(); });
+  await page.locator('.qchip', { hasText: /honey-jar-labels/ }).click();
+  await expect(page.getByText('Opening the job…')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Approve and release' })).toHaveCount(0);
+  await page.unroute('**/api/jobs/*');
+  await ready(page);
+  await expect(page.locator('.card-meta .file')).toContainText('honey-jar-labels.pdf');
+});
+
+test('server unreachable: says so, changes nothing, and retries', async ({ page }) => {
+  await page.route('**/api/session', (r) => r.abort());
+  await page.goto('/');
+  await expect(page.getByText('RollCue could not reach its server. Nothing was changed.')).toBeVisible();
+  await page.unroute('**/api/session');
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await ready(page);
 });
 
 test('approve: bound to the artifact, then a verified receipt and a valid PDF', async ({ page }) => {
@@ -44,6 +71,7 @@ test('wrong guess: flagged, corrected in one step, remembered, re-prepared', asy
   await openJob(page, /stickers-final/);
   await expect(page.locator('.chip.thin')).toBeVisible();
   await expect(page.locator('.thin-note')).toContainText('Check this one');
+  await expect(page.locator('.demo-context')).toContainText('not seen by RollCue');
   const oldFile = await page.locator('.binding').textContent();
   await page.getByRole('button', { name: 'Not this?' }).click();
   await page.locator('.alt', { hasText: 'Poster' }).click();
@@ -139,6 +167,35 @@ test('refresh keeps the work: state is on the server, not in the tab', async ({ 
   await openJob(page, /stickers-final/);
   await expect(page.locator('.intent-name')).toHaveText('Poster');
   await expect(page.getByRole('button', { name: /Remembers 1 correction/ })).toBeVisible();
+});
+
+test('legacy will not output until ticket, preflight and cut are done', async ({ page }) => {
+  await page.goto('/legacy');
+  await page.locator('tr', { hasText: 'olive-market-sticker.pdf' }).first().getByRole('button', { name: 'Open' }).click();
+  await page.getByRole('tab', { name: 'Output' }).click();
+  await expect(page.getByRole('button', { name: 'Generate output' })).toBeDisabled();
+  await expect(page.locator('.lg-missing')).toHaveText('Before output: save the job ticket, run preflight, apply cut settings.');
+});
+
+test('a suggested size is a choice, not a setting already applied (Codex R1-4)', async ({ page }) => {
+  const cv = createCanvas(900, 900), c = cv.getContext('2d');
+  c.fillStyle = '#0d6fb4'; c.beginPath(); c.arc(450, 450, 380, 0, Math.PI * 2); c.fill();
+  await page.goto('/');
+  await ready(page);
+  await page.getByRole('button', { name: '+ Upload' }).click();
+  await page.locator('.drop input[type=file]').setInputFiles({ name: 'badge.png', mimeType: 'image/png', buffer: cv.toBuffer('image/png') });
+  await page.getByLabel('Quantity').fill('500');
+  await page.getByLabel('Media').selectOption('vinyl');
+  await page.getByLabel('Customer notes').fill('die cut stickers');
+  await page.getByRole('button', { name: 'Let RollCue read it' }).click();
+  await ready(page);
+  await expect(page.locator('.headline')).toHaveText('What size should this print?');
+  const suggested = page.locator('.option', { has: page.locator('em', { hasText: 'suggested' }) });
+  await expect(suggested).toBeEnabled();
+  await expect(suggested).toHaveAttribute('aria-checked', 'false');
+  await suggested.click();
+  await ready(page);
+  await expect(page.locator('.headline')).not.toHaveText('What size should this print?');
 });
 
 test('no horizontal overflow at this viewport', async ({ page }) => {

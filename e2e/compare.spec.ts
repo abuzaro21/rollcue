@@ -1,5 +1,5 @@
-// Side-by-side evidence: the same sample job, same backend, completed on each surface by the shortest correct path a
-// competent operator would take. Every operator action goes through `act`, so the counts are what was actually done.
+// Side-by-side evidence: the same sample job, same backend, completed on each surface by the shortest path that surface
+// allows (legacy gates output on ticket, preflight and cut). Every operator action goes through `act`, so the counts are what was actually done.
 import { test, expect, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
@@ -62,7 +62,7 @@ async function legacy(page: Page, chipFile: string, product: string, cut: { meth
     await k.field(() => page.locator(`input[name=cut][value=${cut.method}]`).check(), `choose cut method: ${cut.method}`);
     if (cut.offset) await k.field(() => page.locator('input[type=number]').fill(cut.offset!), `enter offset ${cut.offset} mm`);
     await k.click(page, page.getByRole('button', { name: 'Apply' }));
-    await expect(page.locator('.lg-status')).toContainText(/applied|Nothing to apply/, { timeout: 30_000 });
+    await expect(page.locator('.lg-status')).toContainText('Cut settings applied', { timeout: 30_000 });
   }
   await k.click(page, page.getByRole('tab', { name: 'Output' }), true);
   await k.click(page, page.getByRole('button', { name: 'Generate output' }));
@@ -88,7 +88,7 @@ test('wrong-guess job: RollCue correction vs legacy manual entry', async ({ brow
   const a = await browser.newPage(), b = await browser.newPage();
   results['stickers-final'] = {
     rollcue: await rollcue(a, 'stickers-final', /stickers-final/, 'Poster'),
-    legacy: await legacy(b, 'stickers-final.pdf', 'Poster', null),
+    legacy: await legacy(b, 'stickers-final.pdf', 'Poster', { method: 'none' }),
   };
   await a.close(); await b.close();
 });
@@ -96,7 +96,7 @@ test('wrong-guess job: RollCue correction vs legacy manual entry', async ({ brow
 test.afterAll(async () => {
   mkdirSync(OUT, { recursive: true });
   writeFileSync(`${OUT}/comparison.json`, JSON.stringify({
-    method: 'Playwright drives each surface by the shortest correct path for the same sample job on the same backend, in a fresh session. Clicks, form fields and screen changes are counted as the script performs them. Time includes server work. Legacy is a representative multi-tab preflight built for this comparison, not a real product.',
+    method: 'Playwright drives each surface by the shortest path it allows (legacy will not output until ticket, preflight and cut are done) for the same sample job on the same backend, in a fresh session. Clicks, form fields and screen changes are counted as the script performs them. Time includes server work. Legacy is a representative multi-tab preflight built for this comparison, not a real product.',
     generatedAt: new Date().toISOString().slice(0, 10),
     results,
   }, null, 2) + '\n');

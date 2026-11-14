@@ -4,7 +4,7 @@ What the operator sees, state by state. Every state is a real server state; the 
 
 ## 1. Arrival
 
-On a first visit the server creates a session and seeds four sample jobs. They are read and prepared in the background immediately, so they are ready by the time the page has loaded. The queue shows one chip per job, each with its status. Nothing needs setting up.
+On a first visit the server creates a session and seeds four sample jobs. They are read and prepared in the background straight away; while that runs, the card shows each step as the server records it (usually a few seconds). While the page is connecting it says so; if the server cannot be reached it says that nothing was changed and offers **Try again**. The queue shows one chip per job, each with its status. Nothing needs setting up.
 
 Buttons: **+ Upload** (drop a PDF, PNG or JPEG, optionally fill quantity, size, media and notes), **Try a sample job** (seven synthetic samples with a one-line story each), **Compare: the old way**.
 
@@ -40,10 +40,10 @@ After approval: a **Released** (or **Returned**) stamp, the ticket (intent, quan
 
 ## 5. When something fails
 
-- The worker cannot read the file: the job is `rejected` with the reason in plain words.
+- The worker cannot read the file: the job is `failed` with the reason in plain words, and nothing is prepared.
 - Preparation or release verification fails: the proposal is `failed`, nothing is released, the card says so and offers **Prepare again**.
 - The operator changes something while work is running: the running work is discarded when it finishes, and the card shows the new revision.
 
 ## Mobile
 
-At widths up to 860 px the card becomes a bottom sheet over the mat, with a sticky approve bar. Everything is reachable by keyboard; the compare slider is a real range input.
+At widths up to 860 px the card becomes a sheet below the mat. The approve button stays in reading order, after the headline and summary it approves. Everything is reachable by keyboard; the compare slider is a real range input.
