@@ -13,7 +13,9 @@ export type Act = {
   busy: boolean;
 };
 
-const pct = (v: number) => (v > 0 && v < 0.005 ? "<1%" : `${Math.round(v * 100)}%`);
+const pct = (v: number) => (v > 0 && v < 0.005 ? '<1%' : `${Math.round(v * 100)}%`);
+// Softmax is never exactly 0; a stored 0 is rounding, so a probability reads "<1%".
+const prob = (v: number) => (v < 0.005 ? '<1%' : pct(v));
 const short = (h?: string | null) => (h ? h.slice(0, 8) : '');
 const lower = (i: string) => INTENT_LABEL[i as Intent].toLowerCase();
 
@@ -100,7 +102,7 @@ function NotThis({ job, act, close }: { job: JobView; act: Act; close: () => voi
           <li key={c}>
             <button type="button" className="alt" disabled={act.busy} onClick={() => { close(); act.decide({ intent: c }, `Corrected to ${lower(c)}.`); }}>
               <span className="alt-name">{INTENT_LABEL[c]}</span>
-              <span className="alt-p mono">{pct(pred.probs[c])}</span>
+              <span className="alt-p mono">{prob(pred.probs[c])}</span>
               <span className="alt-why">{pred.forEach[c].length ? pred.forEach[c].map((e) => e.label).join(' · ') : 'little supporting evidence'}</span>
             </button>
           </li>
@@ -234,7 +236,7 @@ function Evidence({ job }: { job: JobView }) {
           <h4>Job type</h4>
           <ul className="probs">
             {INTENTS.map((c) => (
-              <li key={c}><span>{INTENT_LABEL[c]}</span><meter min={0} max={1} value={pred.probs[c]} /><span className="mono">{pct(pred.probs[c])}</span></li>
+              <li key={c}><span>{INTENT_LABEL[c]}</span><meter min={0} max={1} value={pred.probs[c]} /><span className="mono">{prob(pred.probs[c])}</span></li>
             ))}
           </ul>
           {pred.forTop.length > 0 && <p><b>For {lower(pred.top)}:</b> {pred.forTop.map((e) => e.label).join(' · ')}</p>}

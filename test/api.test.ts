@@ -196,6 +196,24 @@ test('approval after the job changed is refused (intake edited under a prepared 
   assert.ok(now.events.some((e: any) => e.type === 'approval-refused'));
 });
 
+test('a proposal prepared under an older policy or model version cannot be approved; a tampered artifact neither', async () => {
+  const id = (await op.post('/api/samples/honey-labels')).body.id;
+  await app.service.idle();
+  const v = (await op.get(`/api/jobs/${id}`)).body;
+  const body = { proposalId: v.proposal.id, artifactSha256: v.proposal.artifact_sha256 };
+  await app.service.db.q(`update proposals set policy_version = 'policy-old' where id = $1`, [v.proposal.id]);
+  const r = await op.post(`/api/jobs/${id}/approve`, body);
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, 'policy-changed');
+  await app.service.db.q(`update proposals set policy_version = $2, artifact = $3 where id = $1`, [v.proposal.id, v.proposal.policy_version, new Uint8Array([37, 80, 68, 70])]);
+  const t = await op.post(`/api/jobs/${id}/approve`, body);
+  assert.equal(t.status, 409);
+  assert.equal(t.body.error, 'binding-mismatch');
+  const after = (await op.get(`/api/jobs/${id}`)).body;
+  assert.equal(after.status, 'ready');
+  assert.equal(after.events.filter((e: any) => e.type === 'approval-refused').length, 2);
+});
+
 test('a broken PDF fails cleanly inside the worker', async () => {
   const r = await op.post('/api/jobs', new TextEncoder().encode('%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\ntrailer << >>\n%%EOF'), { 'x-filename': 'broken.pdf' });
   assert.equal(r.status, 201);

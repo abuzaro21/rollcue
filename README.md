@@ -16,7 +16,7 @@ Built for the DOO Builders League challenge "Beyond the Chatbot".
 
 Open the demo. Four sample jobs are already waiting, already read and prepared. Click **olive-market-sticker.pdf**: RollCue found no cut path, inferred die-cut stickers, traced a contour from the artwork's transparency, and prepared the production PDF. Drag the slider to compare the customer's file with the prepared one. Click **Approve and release**.
 
-Then open **stickers-final.pdf**. The filename says stickers; the file is one A4 window poster. RollCue reads it as stickers but flags the evidence as thin. Click **Not this?**, choose **Poster**, and watch it re-prepare. **Try a sample job** adds more jobs, including a similar file that RollCue now reads correctly because of your correction.
+Then open **stickers-final.pdf**. The filename says stickers; the customer meant one A4 window poster. RollCue reads it as stickers but flags the evidence as thin. Click **Not this?**, choose **Poster**, and watch it re-prepare. **Try a sample job** adds more jobs, including a similar file that RollCue now reads correctly because of your correction.
 
 **Compare: the old way** opens a representative legacy preflight workstation running the same job on the same backend.
 
