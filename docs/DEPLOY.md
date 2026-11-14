@@ -21,6 +21,7 @@ Target shape (Render Blueprint, [`render.yaml`](../render.yaml)):
 - **Web service** `rollcue`: Docker runtime, free plan, `autoDeploy: false`, health check `/healthz`.
 - **Postgres** `rollcue-db`: free plan. Render's free Postgres **expires 30 days after creation**. Created on or after 2026-11-15, it outlives the 2026-12-15 deadline.
 - Environment: `NODE_ENV=production`, `TRUST_PROXY_HOPS=3` (Render's edge adds the client plus two proxy hops to `X-Forwarded-For`), `DATABASE_URL` from the database.
+- Never set `RC_TEST_HOOKS` in production: the server refuses to start with it when `NODE_ENV=production` (Codex R6-6).
 
 Free-tier behaviour to expect and state honestly:
 

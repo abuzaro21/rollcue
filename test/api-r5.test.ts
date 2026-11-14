@@ -13,7 +13,7 @@ after(async () => { await app.close(); });
 function client() {
   let cookie = '';
   const call = async (method: string, p: string, body?: unknown) => {
-    const res = await fetch(base + p, { method, body: body === undefined ? undefined : JSON.stringify(body), headers: { ...(cookie ? { cookie } : {}), ...(method !== 'GET' ? { 'x-rollcue': '1', 'content-type': 'application/json' } : {}) } });
+    const res = await fetch(base + p, { method, body: body === undefined ? undefined : JSON.stringify(body), headers: { ...(cookie ? { cookie } : {}), 'x-rollcue': '1', 'content-type': 'application/json' } });
     const sc = res.headers.get('set-cookie');
     if (sc) cookie = sc.split(';')[0];
     return { status: res.status, body: (res.headers.get('content-type') ?? '').includes('json') ? await res.json() : null };

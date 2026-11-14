@@ -17,7 +17,7 @@ function client() {
     const raw = body instanceof Uint8Array;
     const res = await fetch(base + p, {
       method, body: body === undefined ? undefined : raw ? (body as Uint8Array<ArrayBuffer>) : JSON.stringify(body),
-      headers: { ...(cookie ? { cookie } : {}), ...(method !== 'GET' ? { 'x-rollcue': '1' } : {}), ...(raw ? {} : { 'content-type': 'application/json' }), ...headers },
+      headers: { ...(cookie ? { cookie } : {}), 'x-rollcue': '1', ...(raw ? {} : { 'content-type': 'application/json' }), ...headers },
     });
     const sc = res.headers.get('set-cookie');
     if (sc) cookie = sc.split(';')[0];

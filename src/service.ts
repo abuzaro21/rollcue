@@ -20,6 +20,11 @@ import type { Check } from './pdfout.ts';
 
 export const MAX_JOBS_PER_SESSION = 30;
 export const RETENTION_HOURS = 48;
+const EMPTY = new Uint8Array(0);
+export const MAX_SESSIONS = 5000; // all live sessions on the instance
+const MAX_REVISIONS = 200; // changes per job
+const MAX_METRICS = 200; // client metrics per session
+const MAX_REFUSALS = 50; // refused approvals logged per job
 
 export class HttpError extends Error {
   status: number; code: string;
@@ -104,11 +109,14 @@ export class Service {
 
   // ---------- sessions ----------
 
-  async session(sid: string | null): Promise<{ id: string; created: boolean; roll: RollSettings }> {
+  async session(sid: string | null, create = true): Promise<{ id: string; created: boolean; roll: RollSettings } | null> {
     if (sid && /^[A-Za-z0-9_-]{20,64}$/.test(sid)) {
-      const [s] = await this.db.q<{ id: string; roll: RollSettings }>('update sessions set last_seen = now() where id = $1 returning id, roll', [sid]);
+      const [s] = await this.db.q<{ id: string; roll: RollSettings }>(`update sessions set last_seen = now() where id = $1 and created_at > now() - interval '${RETENTION_HOURS} hours' returning id, roll`, [sid]);
       if (s) return { ...s, created: false };
     }
+    if (!create) return null;
+    const [{ n }] = await this.db.q<{ n: number }>('select count(*)::int as n from sessions');
+    if (n >= MAX_SESSIONS) throw new HttpError(503, 'busy', 'RollCue has too many visitors right now. Try again later.');
     const nid = randomBytes(24).toString('base64url');
     await this.db.q('insert into sessions (id, roll) values ($1, $2::jsonb)', [nid, JSON.stringify(DEFAULT_ROLL)]);
     return { id: nid, created: true, roll: DEFAULT_ROLL };
@@ -133,7 +141,8 @@ export class Service {
   }
 
   async purgeExpired() {
-    const rows = await this.db.q<{ n: number }>(`with d as (delete from sessions where last_seen < now() - interval '${RETENTION_HOURS} hours' returning 1) select count(*)::int as n from d`);
+    // Absolute lifetime: activity does not extend it, so stored work cannot be kept alive indefinitely (Codex R6-8).
+    const rows = await this.db.q<{ n: number }>(`with d as (delete from sessions where created_at < now() - interval '${RETENTION_HOURS} hours' returning 1) select count(*)::int as n from d`);
     return rows[0]?.n ?? 0;
   }
 
@@ -176,13 +185,18 @@ export class Service {
     return jid;
   }
 
+  async #source(jid: string) {
+    const [j] = await this.db.q<{ source: Uint8Array }>('select source from jobs where id = $1', [jid]);
+    if (!j) throw new TaskError('internal', 'The job no longer exists.');
+    return new Uint8Array(j.source);
+  }
+
   async #analyse(jid: string) {
-    const [job] = await this.db.q<JobRow>('select * from jobs where id = $1', [jid]);
+    const [job] = await this.db.q<Pick<JobRow, 'intake'>>('select intake from jobs where id = $1', [jid]);
     if (!job) return;
     let res: AnalyseResult;
     try {
-      const bytes = new Uint8Array(job.source);
-      res = await this.pool.run<AnalyseResult>({ type: 'analyse', bytes }, [bytes.buffer as ArrayBuffer]);
+      res = await this.pool.run<AnalyseResult>(async () => ({ type: 'analyse', bytes: await this.#source(jid) }));
     } catch (e) {
       const err = e as TaskError;
       await this.db.tx(async (q) => {
@@ -252,7 +266,7 @@ export class Service {
         [pid, jid, revision, kind, p.intent, JSON.stringify(p.decision.kind === 'release' ? p.decision.build : null), JSON.stringify(p.decision), JSON.stringify(params), sha(canon([params, p.decision])), POLICY_VERSION, this.model.version, pred.memoryVersion]);
       await this.#event(q, jid, 'proposal-preparing', { proposal: pid, kind, revision, initiatedBy: 'rollcue' });
       const task: PrepareTask = p.decision.kind === 'release'
-        ? { type: 'prepare-release', kind: job.kind as never, bytes: new Uint8Array(job.source), inspection: job.inspection, preview: new Uint8Array(job.preview!), build: p.decision.build, title: `${job.filename} — ${INTENT_LABEL[p.intent!]}`, subject: `RollCue job ${jid}, source sha256 ${job.source_sha256}`, stamp: job.created_at.toISOString() }
+        ? { type: 'prepare-release', kind: job.kind as never, bytes: EMPTY, inspection: job.inspection, preview: EMPTY /* filled when the worker is free */, build: p.decision.build, title: `${job.filename} — ${INTENT_LABEL[p.intent!]}`, subject: `RollCue job ${jid}, source sha256 ${job.source_sha256}`, stamp: job.created_at.toISOString() }
         : { type: 'prepare-notice', filename: job.filename, notice: p.decision.notice, stamp: job.created_at.toISOString() };
       return { pid, task };
     });
@@ -261,7 +275,13 @@ export class Service {
   async #prepare(jid: string, pid: string, task: PrepareTask) {
     let res: PrepareResult | null = null, error: string | null = null;
     if (this.slowNextPrepareMs) { const ms = this.slowNextPrepareMs; this.slowNextPrepareMs = 0; await new Promise((ok) => setTimeout(ok, ms)); }
-    try { res = await this.pool.run<PrepareResult>(task); } catch (e) { error = (e as Error).message; }
+    const load = async (): Promise<PrepareTask> => {
+      if (task.type !== 'prepare-release') return task;
+      const [j] = await this.db.q<{ source: Uint8Array; preview: Uint8Array }>('select source, preview from jobs where id = $1', [jid]);
+      if (!j) throw new TaskError('internal', 'The job no longer exists.');
+      return { ...task, bytes: new Uint8Array(j.source), preview: new Uint8Array(j.preview) };
+    };
+    try { res = await this.pool.run<PrepareResult>(load); } catch (e) { error = (e as Error).message; }
     await this.db.tx(async (q) => {
       const [job] = await q<JobRow>('select id, source_sha256, revision, status from jobs where id = $1 for update', [jid]);
       const [p] = await q<ProposalRow>('select * from proposals where id = $1 for update', [pid]);
@@ -285,7 +305,8 @@ export class Service {
   }
 
   async #supersede(q: Q, jid: string, reason: string) {
-    const rows = await q<{ id: string; status: string }>(`update proposals set status = 'superseded' where job_id = $1 and ${OPEN_PROPOSAL} returning id, status`, [jid]);
+    // The hashes stay as evidence; the bytes of a proposal nobody can approve are not kept (Codex R6-3).
+    const rows = await q<{ id: string; status: string }>(`update proposals set status = 'superseded', artifact = null, preview = null where job_id = $1 and ${OPEN_PROPOSAL} returning id, status`, [jid]);
     for (const r of rows) await this.#event(q, jid, 'proposal-superseded', { proposal: r.id, reason });
   }
 
@@ -313,6 +334,7 @@ export class Service {
       if (CLOSED_JOB.includes(job.status)) throw new HttpError(409, 'closed', `This job is already ${job.status}.`);
       if (job.status !== 'ready') throw new HttpError(409, 'busy', 'This job is still being analysed.');
       if (body.revision !== job.revision) throw new HttpError(409, 'stale', 'The job changed since this view was loaded. Review the current decision.');
+      if (job.revision >= MAX_REVISIONS) throw new HttpError(429, 'too-many-changes', 'This job has been changed too many times. Reject it and upload it again.');
       let next: Params = { ...job.params };
       if ('intent' in params) {
         // A new job type invalidates every type-specific choice made so far.
@@ -348,6 +370,7 @@ export class Service {
       const job = await this.#lockJob(q, sid, jid);
       if (CLOSED_JOB.includes(job.status)) throw new HttpError(409, 'closed', `This job is already ${job.status}.`);
       if (body.revision !== job.revision) throw new HttpError(409, 'stale', 'The job changed since this view was loaded.');
+      if (job.revision >= MAX_REVISIONS) throw new HttpError(429, 'too-many-changes', 'This job has been changed too many times. Reject it and upload it again.');
       const intake = validateIntake({ ...job.intake, ...(body.intake as object) }, job.filename);
       await q('update jobs set intake = $2::jsonb, features = $3::jsonb, revision = $4 where id = $1', [jid, JSON.stringify(intake), JSON.stringify(job.inspection ? featurize(job.inspection, intake) : null), job.revision + 1]);
       await this.#supersede(q, jid, 'intake-edited');
@@ -390,7 +413,10 @@ export class Service {
     if (refused) {
       const r = refused as { proposal: string; error: HttpError };
       // Recorded in its own transaction so the refusal is part of the audit trail.
-      await this.db.tx((q) => this.#event(q, jid, 'approval-refused', { proposal: r.proposal, code: r.error.code }));
+      await this.db.tx(async (q) => {
+        const [{ n }] = await q<{ n: number }>(`select count(*)::int as n from events where job_id = $1 and type = 'approval-refused'`, [jid]);
+        if (n < MAX_REFUSALS) await this.#event(q, jid, 'approval-refused', { proposal: r.proposal, code: r.error.code });
+      });
       // Bring the job up to date now, so the operator's reload shows the current decision being prepared.
       if (r.error.code === 'superseded') { const prep = await this.#planJob(jid, { reason: 'reading-changed', bump: true, onlyIfChanged: true }); if (prep) this.#bg(this.#prepare(jid, prep.pid, prep.task)); }
       throw r.error;
@@ -452,6 +478,10 @@ export class Service {
       const job = await this.#lockJob(q, sid, jid);
       if (job.status !== 'ready') throw new HttpError(409, 'closed', 'Nothing to retry.');
       if (body.revision !== job.revision) throw new HttpError(409, 'stale', 'The job changed since this view was loaded.');
+      // Only a failure can be retried; rebuilding a good proposal would only grow storage (Codex R6-3).
+      const [last] = await q<{ status: string }>('select status from proposals where job_id = $1 and revision = $2 order by created_at desc limit 1', [jid, job.revision]);
+      if (last?.status !== 'failed') throw new HttpError(409, 'nothing-to-retry', 'Nothing failed, so there is nothing to retry.');
+      if (job.revision >= MAX_REVISIONS) throw new HttpError(429, 'too-many-changes', 'This job has been changed too many times. Reject it and upload it again.');
       await this.#event(q, jid, 'retry-requested', { revision: job.revision });
     });
     await this.#replan(jid, { reason: 'retry', bump: true });
@@ -515,7 +545,8 @@ export class Service {
     if (body.surface !== 'decision' && body.surface !== 'legacy') throw new HttpError(400, 'bad-params', 'surface must be decision or legacy.');
     const data = JSON.stringify(body.data ?? {});
     if (data.length > 2000) throw new HttpError(413, 'too-large', 'Metric too large.');
-    await this.db.q('insert into metrics (session_id, job_id, surface, data) values ($1,$2,$3,$4::jsonb)', [sid, typeof body.jobId === 'string' ? body.jobId.slice(0, 40) : null, body.surface, data]);
+    // Client-reported and untrusted; capped per session so it cannot grow storage (Codex R6-3).
+    await this.db.q(`insert into metrics (session_id, job_id, surface, data) select $1,$2,$3,$4::jsonb where (select count(*) from metrics where session_id = $1) < ${MAX_METRICS}`, [sid, typeof body.jobId === 'string' ? body.jobId.slice(0, 40) : null, body.surface, data]);
   }
 
   /** Restart recovery: re-run analysis for jobs interrupted mid-analysis, and re-prepare proposals interrupted mid-build. */

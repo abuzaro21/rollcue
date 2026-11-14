@@ -11,10 +11,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const env = process.env;
 
 export async function start(o: { port?: number; dbUrl?: string; dbDir?: string; testHooks?: boolean } = {}) {
+  // The hooks are process-wide (one visitor could fail another's release), so production refuses to start with them (Codex R6-6).
+  if (o.testHooks && env.NODE_ENV === 'production') throw new Error('Test hooks cannot be enabled when NODE_ENV=production.');
   const db = await openDb({ url: o.dbUrl, dir: o.dbDir });
   const pool = new Pool(Number(env.RC_TASK_TIMEOUT_MS ?? 25_000));
   const model = JSON.parse(await readFile(path.join(root, 'src/model.json'), 'utf8')) as ModelFile;
   const service = new Service({ db, pool, model, samplesDir: path.join(root, 'samples') });
+  await service.purgeExpired(); // expired data is gone before anything is recovered
   const recovered = await service.recover();
   const server = createApp({
     service, publicDir: path.join(root, 'public'), trustProxyHops: Number(env.TRUST_PROXY_HOPS ?? 0), testHooks: o.testHooks,

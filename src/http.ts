@@ -16,6 +16,10 @@ const SECURITY_HEADERS = {
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
 const JSON_LIMIT = 64 * 1024;
+// All request bodies being received at once share this budget, so a burst of slow uploads cannot hold the heap (Codex R6-2).
+const INFLIGHT_BODY_BYTES = 48 * 1024 * 1024;
+// Uploads and sample jobs wait for the single worker; past this backlog, new work is refused instead of queued (Codex R6-2).
+export const MAX_BACKLOG = 8;
 const COOKIE = 'rc_sid';
 
 export type AppOpts = { service: Service; publicDir: string; trustProxyHops: number; testHooks?: boolean; secureCookies?: boolean };
@@ -43,14 +47,26 @@ export function clientIp(req: http.IncomingMessage, hops: number): string {
 export function createApp(o: AppOpts) {
   const { service: svc } = o;
   const general = new Limiter(10, 60), uploads = new Limiter(0.2, 8);
+  // A new session seeds four prepared jobs, so it is the most expensive request; creating one has its own budget (Codex R6-1).
+  const sessions = o.testHooks ? new Limiter(1000, 1000) : new Limiter(1 / 30, 10);
+  let inflight = 0;
 
   const readBody = (req: http.IncomingMessage, limit: number) => new Promise<Buffer>((resolve, reject) => {
     const len = Number(req.headers['content-length'] ?? 0);
     if (len > limit) { reject(new HttpError(413, 'too-large', `Body larger than ${Math.round(limit / 1024)} KB.`)); req.resume(); return; }
-    const parts: Buffer[] = []; let n = 0;
-    req.on('data', (c: Buffer) => { n += c.length; if (n > limit) { reject(new HttpError(413, 'too-large', `Body larger than ${Math.round(limit / 1024)} KB.`)); req.destroy(); } else parts.push(c); });
-    req.on('end', () => resolve(Buffer.concat(parts)));
-    req.on('error', reject);
+    if (inflight + len > INFLIGHT_BODY_BYTES) { reject(new HttpError(503, 'busy', 'RollCue is busy receiving other files. Try again in a minute.')); req.resume(); return; }
+    const parts: Buffer[] = []; let n = 0, settled = false;
+    const finish = (fn: () => void) => { if (settled) return; settled = true; inflight -= n; fn(); };
+    req.on('data', (c: Buffer) => {
+      if (settled) return;
+      n += c.length; inflight += c.length;
+      if (n > limit) { finish(() => reject(new HttpError(413, 'too-large', `Body larger than ${Math.round(limit / 1024)} KB.`))); req.destroy(); }
+      else if (inflight > INFLIGHT_BODY_BYTES) { finish(() => reject(new HttpError(503, 'busy', 'RollCue is busy receiving other files. Try again in a minute.'))); req.destroy(); }
+      else parts.push(c);
+    });
+    req.on('end', () => finish(() => resolve(Buffer.concat(parts))));
+    req.on('error', (e) => finish(() => reject(e)));
+    req.on('close', () => finish(() => reject(new HttpError(400, 'aborted', 'The upload was interrupted.'))));
   });
   const json = async (req: http.IncomingMessage) => {
     const b = await readBody(req, JSON_LIMIT);
@@ -93,16 +109,21 @@ export function createApp(o: AppOpts) {
     const mutating = m !== 'GET' && m !== 'HEAD';
     if (mutating && req.headers['x-rollcue'] !== '1') throw new HttpError(403, 'csrf', 'Missing request header.');
 
-    const cookies = Object.fromEntries(String(req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).filter((kv) => kv.length === 2));
-    const sess = await svc.session(cookies[COOKIE] ?? null);
-    const sid = sess.id;
-    if (sess.created) {
-      res.setHeader('set-cookie', `${COOKIE}=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${48 * 3600}${o.secureCookies ? '; Secure' : ''}`);
-      await svc.seed(sid);
-    }
-
     const seg = p.split('/').filter(Boolean).slice(1); // after 'api'
     const route = `${m} /${seg.map((s, i) => (seg[i - 1] === 'jobs' || seg[i - 1] === 'proposals' || seg[i - 1] === 'samples' ? ':id' : s)).join('/')}`;
+    const cookies = Object.fromEntries(String(req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).filter((kv) => kv.length === 2));
+    let sess = await svc.session(cookies[COOKIE] ?? null, false);
+    if (!sess) {
+      // Only the explicit start-up call creates a session, and it is header-protected and budgeted (Codex R6-1).
+      if (route !== 'GET /session') throw new HttpError(401, 'no-session', 'Your session has ended. Reload the page to start a new one.');
+      if (req.headers['x-rollcue'] !== '1') throw new HttpError(403, 'csrf', 'Missing request header.');
+      if (!sessions.take(ip)) throw new HttpError(429, 'rate-limited', 'Too many new sessions from this address. Wait a few minutes.');
+      sess = (await svc.session(null, true))!;
+      res.setHeader('set-cookie', `${COOKIE}=${sess.id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${48 * 3600}${o.secureCookies ? '; Secure' : ''}`);
+      if (svc.pool.backlog < 2 * MAX_BACKLOG) await svc.seed(sess.id); // under load a new visitor starts with an empty queue
+    }
+    const sid = sess.id;
+    const admit = () => { if (svc.pool.backlog >= MAX_BACKLOG) throw new HttpError(503, 'busy', 'RollCue is busy preparing other jobs. Try again in a minute.'); };
     const jid = seg[1], pid = seg[3];
 
     switch (route) {
@@ -113,13 +134,14 @@ export function createApp(o: AppOpts) {
       case 'GET /jobs': return send(res, 200, await svc.list(sid));
       case 'POST /jobs': {
         if (!uploads.take(ip)) throw new HttpError(429, 'rate-limited', 'Too many uploads. Wait a minute.');
+        admit();
         const filename = decodeURIComponent(String(req.headers['x-filename'] ?? 'upload'));
         let intake: unknown = {};
         try { intake = JSON.parse(decodeURIComponent(String(req.headers['x-intake'] ?? '%7B%7D'))); } catch { throw new HttpError(400, 'bad-intake', 'Intake header is not valid JSON.'); }
         const bytes = new Uint8Array(await readBody(req, MAX_BYTES));
         return send(res, 201, { id: await svc.createJob(sid, { bytes, filename, intake }) });
       }
-      case 'POST /samples/:id': return send(res, 201, { id: await svc.createSample(sid, seg[1]) });
+      case 'POST /samples/:id': admit(); return send(res, 201, { id: await svc.createSample(sid, seg[1]) });
       case 'GET /jobs/:id': return send(res, 200, await svc.view(sid, jid));
       case 'GET /jobs/:id/source.png': return send(res, 200, await svc.sourcePreview(sid, jid), { 'content-type': 'image/png', 'cache-control': 'private, max-age=3600' });
       case 'POST /jobs/:id/decide': return send(res, 200, await svc.decide(sid, jid, (await json(req)) as never));
@@ -150,12 +172,15 @@ export function createApp(o: AppOpts) {
     throw new HttpError(404, 'not-found', 'Not found.');
   }
 
-  return http.createServer((req, res) => {
+  const server = http.createServer((req, res) => {
     handle(req, res).catch((e: unknown) => {
-      if (res.headersSent) { res.destroy(); return; }
+      if (res.headersSent || res.destroyed) { res.destroy(); return; }
       if (e instanceof HttpError) return send(res, e.status, { error: e.code, message: e.message });
       console.error('[rollcue] request failed', e);
       send(res, 500, { error: 'internal', message: 'Something went wrong. Reload the job to see its current state.' });
     });
   });
+  // Slow or idle clients cannot hold connections open for minutes (Codex R6-2).
+  server.headersTimeout = 15_000; server.requestTimeout = 60_000; server.keepAliveTimeout = 5_000; server.maxConnections = 256;
+  return server;
 }

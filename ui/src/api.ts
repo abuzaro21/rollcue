@@ -20,7 +20,7 @@ async function call<T>(method: string, path: string, body?: unknown, headers: Re
   const raw = body instanceof Blob || body instanceof ArrayBuffer;
   const res = await fetch(path, {
     method, credentials: 'same-origin',
-    headers: { ...(method !== 'GET' ? { 'x-rollcue': '1' } : {}), ...(body !== undefined && !raw ? { 'content-type': 'application/json' } : {}), ...headers },
+    headers: { 'x-rollcue': '1', ...(body !== undefined && !raw ? { 'content-type': 'application/json' } : {}), ...headers },
     body: body === undefined ? undefined : raw ? (body as BodyInit) : JSON.stringify(body),
   });
   if (res.status === 204) return undefined as T;

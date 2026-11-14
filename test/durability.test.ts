@@ -13,7 +13,7 @@ test('restart preserves pending approvals and resumes interrupted work', async (
   let app = await start({ dbDir: dir });
   try {
     let base = `http://127.0.0.1:${app.port}`;
-    const s = await fetch(`${base}/api/session`);
+    const s = await fetch(`${base}/api/session`, { headers: { 'x-rollcue': '1' } });
     const cookie = s.headers.get('set-cookie')!.split(';')[0];
     const h = { cookie, 'x-rollcue': '1', 'content-type': 'application/json' };
     await app.service.idle();

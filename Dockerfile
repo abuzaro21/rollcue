@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24.13.0-slim AS build
+FROM node:24.13.0-slim@sha256:4660b1ca8b28d6d1906fd644abe34b2ed81d15434d26d845ef0aced307cf4b6f AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts && npm rebuild @napi-rs/canvas
@@ -8,7 +8,7 @@ COPY ui ui
 COPY src src
 RUN npx vite build
 
-FROM node:24.13.0-slim
+FROM node:24.13.0-slim@sha256:4660b1ca8b28d6d1906fd644abe34b2ed81d15434d26d845ef0aced307cf4b6f
 ENV NODE_ENV=production PORT=3000
 WORKDIR /app
 COPY package.json package-lock.json ./

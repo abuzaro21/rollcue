@@ -1,4 +1,5 @@
 // Document inspection: everything here is measured from the uploaded bytes. Nothing is guessed; unknowns stay null.
+import { createInflate } from 'node:zlib';
 import { PDFDocument, PDFName, PDFArray, PDFDict, PDFRawStream, PDFStream, PDFRef, decodePDFRawStream } from 'pdf-lib';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
@@ -13,6 +14,9 @@ export const MAX_PAGES = 20;
 export const MAX_SIDE_MM = 5000;
 export const MAX_PAGE_MM = MAX_SIDE_MM + 200; // page box incl. room for bleed and marks
 export const MAX_PDF_IMAGE_PIXELS = 100_000_000; // declared image pixels across the whole PDF, checked before decoding
+export const MAX_INFLATE_IMAGE = 512 * 1024 * 1024; // decompressed bytes of all image streams together (Codex R6-4)
+export const MAX_INFLATE_OTHER = 64 * 1024 * 1024; // decompressed bytes of every other stream together
+const MAX_IMAGE_SIDE = 100_000;
 export const RENDER_LONG_SIDE_PX = 1600;
 export const RENDER_MAX_PPI = 300;
 
@@ -215,6 +219,13 @@ function decodeName(n: string | undefined): string {
   return n.replace(/^\//, '').replace(/#([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
 }
 
+// A declared image side must be a sane positive integer; NaN or a negative side would cancel out of the pixel budget (Codex R6-5).
+function imageSide(v: string | undefined): number {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_IMAGE_SIDE) throw new Rejected('malformed', 'An image in the PDF declares an impossible size.');
+  return n;
+}
+
 function streamText(s: PDFStream): string {
   try {
     const bytes = s instanceof PDFRawStream ? decodePDFRawStream(s).decode() : (s as unknown as { getContents(): Uint8Array }).getContents();
@@ -252,7 +263,7 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
     return null;
   };
   const resolveCs = (res: PDFDict | undefined, name: string) => name === 'Pattern' ? PATTERN : /^Device|^Cal|^Lab$/.test(name) ? null : colourants(sub(res, 'ColorSpace', name));
-  let tokens = 0;
+  let tokens = 0, inlinePixels = 0;
   const onStack = new Set<PDFStream>();
 
   const exec = (content: string, res: PDFDict | undefined, gs0: Gs, hidden: boolean, depth: number) => {
@@ -301,7 +312,14 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
       if (++tokens > MAX_TOKENS) throw new Rejected('too-complex', 'The PDF page is too complex to inspect.');
       const t = mt[0];
       if (t.startsWith('/') || /^[+-]?(\d+\.?\d*|\.\d+)$/.test(t)) { ops.push(t); continue; }
-      if (t[0] === '(' || t[0] === '<' || t[0] === '%' || t === '>>' || t.startsWith('BI')) continue;
+      if (t.startsWith('BI')) {
+        // Inline images are decoded by the renderer too, so their declared size counts against the same budget (Codex R6-5).
+        const head = t.slice(0, t.search(/\sID[\s]/) >>> 0);
+        inlinePixels += imageSide(/\/(?:W|Width)\s+(\S+)/.exec(head)?.[1]) * imageSide(/\/(?:H|Height)\s+(\S+)/.exec(head)?.[1]);
+        if (inlinePixels > MAX_PDF_IMAGE_PIXELS) throw new Rejected('too-large', 'The PDF\'s inline images are too large.');
+        continue;
+      }
+      if (t[0] === '(' || t[0] === '<' || t[0] === '%' || t === '>>') continue;
       switch (t) {
         case 'q': stack.push(gs); gs = { ...gs }; break;
         case 'Q': gs = stack.pop() ?? gs; break;
@@ -350,9 +368,58 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
   return uses;
 }
 
+/** Inflated size of a zlib body, counted chunk by chunk and abandoned past `limit`, so nothing large is held. */
+function inflatedSize(body: Uint8Array, limit: number): Promise<number> {
+  return new Promise((resolve) => {
+    let n = 0;
+    const z = createInflate({ finishFlush: 2 /* Z_SYNC_FLUSH: count what a lenient reader would recover */ });
+    z.on('data', (c: Buffer) => { n += c.length; if (n > limit) { z.destroy(); resolve(n); } });
+    z.on('end', () => resolve(n));
+    z.on('error', () => resolve(n));
+    z.end(body);
+  });
+}
+
+const BOMB_FILTERS = /\/(LZWDecode|LZW|RunLengthDecode|RL)\b/;
+function checkFilters(names: string[]) {
+  // Filters RollCue cannot bound before decoding are refused; an ASCII wrapper would hide Flate from the pre-pass (Codex R6-4).
+  if (names.some((n) => BOMB_FILTERS.test(n))) throw new Rejected('unsupported', 'The PDF uses an old compression method (LZW or RunLength). Please re-export it.');
+  const flate = names.findIndex((n) => /^\/(FlateDecode|Fl)$/.test(n));
+  if (flate > 0 && names.slice(0, flate).some((n) => /^\/(ASCII85Decode|A85|ASCIIHexDecode|AHx)$/.test(n))) throw new Rejected('unsupported', 'The PDF wraps compressed data in a text encoding. Please re-export it.');
+}
+
+/**
+ * Before any parser decodes anything: every compressed stream body in the raw file is inflated without keeping the output,
+ * and the totals are capped. pdf-lib decodes object streams while loading, so this has to come first (Codex R6-4).
+ */
+export async function pdfInflateBudget(bytes: Uint8Array): Promise<{ image: number; other: number }> {
+  const text = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length).toString('latin1');
+  const re = /stream\r?\n/g;
+  const total = { image: 0, other: 0 };
+  for (let m; (m = re.exec(text)); ) {
+    if (text.slice(Math.max(0, m.index - 3), m.index) === 'end') continue;
+    const start = m.index + m[0].length;
+    const end = text.indexOf('endstream', start);
+    if (end < 0) break;
+    const dict = text.slice(Math.max(0, m.index - 2048), m.index);
+    const o = dict.lastIndexOf(' obj'), own = o >= 0 ? dict.slice(o) : dict; // this stream's dictionary, roughly
+    const filter = /\/Filter\s*(\[[^\]]*\]|\/[^\s/<>[\]]+)/.exec(own)?.[1] ?? '';
+    checkFilters(filter.match(/\/[^\s/<>[\]]+/g) ?? []);
+    re.lastIndex = end;
+    if (bytes[start] !== 0x78) continue; // not a zlib body
+    const image = /\/Subtype\s*\/Image\b/.test(own);
+    const cap = image ? MAX_INFLATE_IMAGE : MAX_INFLATE_OTHER;
+    const key = image ? 'image' : 'other';
+    total[key] += await inflatedSize(bytes.subarray(start, end), cap - total[key]);
+    if (total[key] > cap) throw new Rejected('too-large', 'The PDF decompresses to far more data than a print file needs.');
+  }
+  return total;
+}
+
 export type PdfStructure = Pick<Inspection, 'pages' | 'boxes' | 'bleedMm' | 'rotation' | 'spots' | 'cut' | 'printableAnnots'>;
 
 export async function pdfStructure(bytes: Uint8Array): Promise<PdfStructure> {
+  await pdfInflateBudget(bytes);
   let doc: PDFDocument;
   try {
     doc = await PDFDocument.load(bytes, { updateMetadata: false, throwOnInvalidObject: false });
@@ -372,8 +439,12 @@ export async function pdfStructure(bytes: Uint8Array): Promise<PdfStructure> {
   // Decoded image size is declared up front; refuse before pdf.js allocates it (Codex R3-13).
   let imagePixels = 0;
   for (const [, obj] of doc.context.enumerateIndirectObjects()) {
-    if (!(obj instanceof PDFStream) || obj.dict.lookup(PDFName.of('Subtype'))?.toString() !== '/Image') continue;
-    imagePixels += Number(obj.dict.lookup(PDFName.of('Width'))?.toString()) * Number(obj.dict.lookup(PDFName.of('Height'))?.toString()) || 0;
+    if (!(obj instanceof PDFStream)) continue;
+    // A filter given by reference is invisible to the raw pre-pass; resolved here, before anything decodes the stream.
+    const f = obj.dict.lookup(PDFName.of('Filter'));
+    checkFilters(f instanceof PDFArray ? f.asArray().map((x) => doc.context.lookup(x)?.toString() ?? '') : f ? [f.toString()] : []);
+    if (obj.dict.lookup(PDFName.of('Subtype'))?.toString() !== '/Image') continue;
+    imagePixels += imageSide(obj.dict.lookup(PDFName.of('Width'))?.toString()) * imageSide(obj.dict.lookup(PDFName.of('Height'))?.toString());
   }
   if (imagePixels > MAX_PDF_IMAGE_PIXELS) throw new Rejected('too-large', `The PDF's images total ${Math.round(imagePixels / 1e6)} megapixels; the limit is ${MAX_PDF_IMAGE_PIXELS / 1e6}.`);
   const media = toBox(inherited(node, 'MediaBox'));
