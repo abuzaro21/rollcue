@@ -5,9 +5,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 log=docs/evidence/ci-local.log
+dirty=$(git status --porcelain) # read before tee truncates the tracked log
 {
   echo "RollCue clean-clone CI — commit $(git rev-parse HEAD) — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  [ -z "$(git status --porcelain)" ] && echo "working tree clean" || echo "note: uncommitted changes exist and are NOT part of this run"
+  [ -z "$dirty" ] && echo "working tree clean" || echo "note: uncommitted changes exist and are NOT part of this run"
   MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd)/.git:/src.git:ro" node:24.13.0 bash -c '
     set -euo pipefail
     apt-get update -qq >/dev/null && apt-get install -y -qq ghostscript >/dev/null
