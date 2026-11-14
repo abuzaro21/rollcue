@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src", "web", "dataset", "scripts", "test", "e2e", "film", "vite.config.ts", "playwright.config.ts"]
+  "include": ["src", "ui", "dataset", "scripts", "test", "e2e", "film", "vite.config.ts", "playwright.config.ts"]
 }

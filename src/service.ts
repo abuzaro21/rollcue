@@ -490,3 +490,6 @@ export function verifyChain(jid: string, events: Array<{ seq: number; at: Date; 
   }
   return true;
 }
+
+export type JobView = Awaited<ReturnType<Service['view']>>;
+export type JobSummary = Awaited<ReturnType<Service['list']>>[number];

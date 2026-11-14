@@ -16,7 +16,7 @@ function client() {
   const call = async (method: string, p: string, body?: unknown, headers: Record<string, string> = {}): Promise<R> => {
     const raw = body instanceof Uint8Array;
     const res = await fetch(base + p, {
-      method, body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
+      method, body: body === undefined ? undefined : raw ? (body as Uint8Array<ArrayBuffer>) : JSON.stringify(body),
       headers: { ...(cookie ? { cookie } : {}), ...(method !== 'GET' ? { 'x-rollcue': '1' } : {}), ...(raw ? {} : { 'content-type': 'application/json' }), ...headers },
     });
     const sc = res.headers.get('set-cookie');
