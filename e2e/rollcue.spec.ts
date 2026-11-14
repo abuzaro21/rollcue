@@ -272,3 +272,22 @@ test('no horizontal overflow at this viewport', async ({ page }) => {
   const [sw, cw] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
   expect(sw).toBeLessThanOrEqual(cw);
 });
+
+test('legacy shows the return notice before it can be approved (Codex R7-8)', async ({ page }) => {
+  await page.goto('/legacy');
+  await expect(page.locator('.lg-table')).toBeVisible();
+  await page.locator('tr', { hasText: 'window-poster.jpg' }).first().getByRole('button', { name: 'Open' }).click();
+  await page.locator('select').selectOption({ label: 'Poster' });
+  await page.getByRole('button', { name: 'Save ticket' }).click();
+  await expect(page.locator('.lg-status')).toContainText('Ticket saved', { timeout: 30_000 });
+  await page.getByRole('tab', { name: 'Preflight' }).click();
+  await page.getByRole('button', { name: 'Run preflight' }).click();
+  await page.getByRole('tab', { name: 'Cut & offsets' }).click();
+  await page.locator('input[name=cut][value=none]').check();
+  await page.getByRole('button', { name: 'Apply' }).click();
+  await expect(page.locator('.lg-status')).toContainText('Cut settings applied', { timeout: 30_000 });
+  await page.getByRole('tab', { name: 'Output' }).click();
+  await page.getByRole('button', { name: 'Generate output' }).click();
+  await expect(page.locator('.lg-output .notice-text')).toContainText('ppi or more');
+  await expect(page.getByRole('button', { name: /Approve & send/ })).toBeEnabled();
+});

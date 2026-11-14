@@ -234,7 +234,9 @@ function streamText(s: PDFStream): string {
 }
 
 type Use = { stroked: boolean; filled: boolean; hidden: boolean; loops: number; openLoops: number; bbox: number[] | null };
-type Gs = { ctm: number[]; sCs: string[] | null; sTint: number; sPat: string | null; fCs: string[] | null; fTint: number; fPat: string | null };
+// One tint per colourant: a DeviceN colour paints only the colourants whose own tint is above zero (Codex R7-3).
+type Gs = { ctm: number[]; sCs: string[] | null; sTint: number[]; sPat: string | null; fCs: string[] | null; fTint: number[]; fPat: string | null };
+const inked = (cs: string[] | null, tint: number[]) => (cs && cs !== PATTERN ? cs.filter((_, i) => (tint[i] ?? 1) > 0) : []);
 const PATTERN = ['#pattern'];
 const MAX_TOKENS = 5_000_000;
 const mul = (m: number[], n: number[]) => [
@@ -249,7 +251,7 @@ const mul = (m: number[], n: number[]) => [
  * space that is only declared, a process-colour reset, a zero tint or an empty path paints no cut (Codex R3-4).
  * Strings and inline images are skipped; text painted in a colourant marks it hidden.
  */
-export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources: PDFDict | undefined): Map<string, Use> {
+export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources: PDFDict | undefined, pixelBudget = MAX_PDF_IMAGE_PIXELS): Map<string, Use> {
   const uses = new Map<string, Use>();
   const use = (n: string) => { let u = uses.get(n); if (!u) uses.set(n, u = { stroked: false, filled: false, hidden: false, loops: 0, openLoops: 0, bbox: null }); return u; };
   const sub = (res: PDFDict | undefined, cat: string, key: string) => { const d = res?.lookup(PDFName.of(cat)); return d instanceof PDFDict ? d.lookup(PDFName.of(key)) : undefined; };
@@ -294,8 +296,8 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
       if (fill && gs.fCs === PATTERN) runPattern(gs.fPat);
       if (stroke && gs.sCs === PATTERN) runPattern(gs.sPat);
       const drawn = path.filter((p) => p.segs > 0);
-      if (drawn.length && fill && gs.fCs && gs.fCs !== PATTERN && gs.fTint > 0) for (const n of gs.fCs) { const u = use(n); u.filled = true; if (hidden) u.hidden = true; }
-      if (drawn.length && stroke && gs.sCs && gs.sCs !== PATTERN && gs.sTint > 0) for (const n of gs.sCs) {
+      if (drawn.length && fill) for (const n of inked(gs.fCs, gs.fTint)) { const u = use(n); u.filled = true; if (hidden) u.hidden = true; }
+      if (drawn.length && stroke) for (const n of inked(gs.sCs, gs.sTint)) {
         const u = use(n);
         if (hidden) { u.hidden = true; continue; }
         u.stroked = true;
@@ -316,7 +318,7 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
         // Inline images are decoded by the renderer too, so their declared size counts against the same budget (Codex R6-5).
         const head = t.slice(0, t.search(/\sID[\s]/) >>> 0);
         inlinePixels += imageSide(/\/(?:W|Width)\s+(\S+)/.exec(head)?.[1]) * imageSide(/\/(?:H|Height)\s+(\S+)/.exec(head)?.[1]);
-        if (inlinePixels > MAX_PDF_IMAGE_PIXELS) throw new Rejected('too-large', 'The PDF\'s inline images are too large.');
+        if (inlinePixels > pixelBudget) throw new Rejected('too-large', `The PDF's images total more than ${MAX_PDF_IMAGE_PIXELS / 1e6} megapixels.`); // shared with image objects (Codex R7-7)
         continue;
       }
       if (t[0] === '(' || t[0] === '<' || t[0] === '%' || t === '>>') continue;
@@ -324,10 +326,10 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
         case 'q': stack.push(gs); gs = { ...gs }; break;
         case 'Q': gs = stack.pop() ?? gs; break;
         case 'cm': if (ops.length >= 6) gs.ctm = mul([num(6), num(5), num(4), num(3), num(2), num(1)], gs.ctm); break;
-        case 'CS': gs.sCs = resolveCs(res, lastName()); gs.sTint = 1; gs.sPat = null; break;
-        case 'cs': gs.fCs = resolveCs(res, lastName()); gs.fTint = 1; gs.fPat = null; break;
-        case 'SC': case 'SCN': if (gs.sCs === PATTERN) gs.sPat = lastName(); else { const v = ops.filter((o) => !o.startsWith('/')).map(Number); gs.sTint = v.length ? Math.max(...v) : gs.sTint; } break;
-        case 'sc': case 'scn': if (gs.fCs === PATTERN) gs.fPat = lastName(); else { const v = ops.filter((o) => !o.startsWith('/')).map(Number); gs.fTint = v.length ? Math.max(...v) : gs.fTint; } break;
+        case 'CS': gs.sCs = resolveCs(res, lastName()); gs.sTint = []; gs.sPat = null; break;
+        case 'cs': gs.fCs = resolveCs(res, lastName()); gs.fTint = []; gs.fPat = null; break;
+        case 'SC': case 'SCN': if (gs.sCs === PATTERN) gs.sPat = lastName(); else { const v = ops.filter((o) => !o.startsWith('/')).map(Number); if (v.length) gs.sTint = v; } break;
+        case 'sc': case 'scn': if (gs.fCs === PATTERN) gs.fPat = lastName(); else { const v = ops.filter((o) => !o.startsWith('/')).map(Number); if (v.length) gs.fTint = v; } break;
         case 'G': case 'RG': case 'K': gs.sCs = null; break;
         case 'g': case 'rg': case 'k': gs.fCs = null; break;
         case 'm': path.push({ pts: [pt(num(2), num(1))], segs: 0, closed: false }); break;
@@ -351,7 +353,7 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
         case 'b': case 'b*': if (cur()) cur()!.closed = true; paint(true, true); break;
         case 'n': path = []; break;
         case 'Tj': case 'TJ': case "'": case '"':
-          for (const n of [...(gs.fCs && gs.fCs !== PATTERN && gs.fTint > 0 ? gs.fCs : []), ...(gs.sCs && gs.sCs !== PATTERN ? gs.sCs : [])]) use(n).hidden = true;
+          for (const n of [...inked(gs.fCs, gs.fTint), ...(gs.sCs && gs.sCs !== PATTERN ? gs.sCs : [])]) use(n).hidden = true;
           break;
         case 'sh': { const sh = sub(res, 'Shading', lastName()); if (sh instanceof PDFDict || sh instanceof PDFStream) { const d = sh instanceof PDFStream ? sh.dict : sh; for (const n of colourants(d.get(PDFName.of('ColorSpace'))) ?? []) use(n).hidden = true; } break; }
         case 'Do': {
@@ -364,7 +366,7 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
     }
   };
   // A page's content array is one logical stream: q in one part may be closed by Q in the next.
-  exec(streams.map(streamText).join('\n'), resources, { ctm: [1, 0, 0, 1, 0, 0], sCs: null, sTint: 1, sPat: null, fCs: null, fTint: 1, fPat: null }, false, 0);
+  exec(streams.map(streamText).join('\n'), resources, { ctm: [1, 0, 0, 1, 0, 0], sCs: null, sTint: [], sPat: null, fCs: null, fTint: [], fPat: null }, false, 0);
   return uses;
 }
 
@@ -406,7 +408,8 @@ export async function pdfInflateBudget(bytes: Uint8Array): Promise<{ image: numb
     const filter = /\/Filter\s*(\[[^\]]*\]|\/[^\s/<>[\]]+)/.exec(own)?.[1] ?? '';
     checkFilters(filter.match(/\/[^\s/<>[\]]+/g) ?? []);
     re.lastIndex = end;
-    if (bytes[start] !== 0x78) continue; // not a zlib body
+    // Any valid zlib header, not only the common 0x78 one: a small window still inflates (Codex R7-1).
+    if ((bytes[start] & 0x0f) !== 8 || ((bytes[start] << 8) | bytes[start + 1]) % 31 !== 0) continue; // not a zlib body
     const image = /\/Subtype\s*\/Image\b/.test(own);
     const cap = image ? MAX_INFLATE_IMAGE : MAX_INFLATE_OTHER;
     const key = image ? 'image' : 'other';
@@ -463,7 +466,7 @@ export async function pdfStructure(bytes: Uint8Array): Promise<PdfStructure> {
   const streams: PDFStream[] = [];
   if (contents instanceof PDFStream) streams.push(contents);
   else if (contents instanceof PDFArray) for (const r of contents.asArray()) { const s = doc.context.lookup(r); if (s instanceof PDFStream) streams.push(s); }
-  const uses = scanColourUse(doc, streams, node.Resources());
+  const uses = scanColourUse(doc, streams, node.Resources(), MAX_PDF_IMAGE_PIXELS - imagePixels);
   const spots = [...new Set([...[...spotMap.values()].flatMap((s) => [...s]), ...[...uses.keys()].filter((n) => !/^(Cyan|Magenta|Yellow|Black|None|All)$/.test(n))])];
 
   // Annotations print only if their Print flag is set; Links and Popups never draw (Codex R3-8).

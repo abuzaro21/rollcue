@@ -97,7 +97,8 @@ export class Service {
   db: Db; pool: Pool; model: ModelFile; samplesDir: string; now: () => Date;
   failNextRelease = false; // test hook: simulate an execution failure
   slowNextPrepareMs = 0; // test hook: hold the next preparation open
-  #executing = new Set<string>(); // proposals whose release is running in this process
+  #executing = new Set<string>();
+  #reserved = 0; // proposals whose release is running in this process
   #pending = new Set<Promise<unknown>>();
   #samples: Sample[] | null = null;
 
@@ -154,20 +155,36 @@ export class Service {
   }
 
   /** First visit: queue the samples marked `seed`, so the operator arrives to work RollCue has already prepared. */
-  async seed(sid: string) {
-    for (const s of (await this.samples()).filter((x) => x.seed)) await this.createSample(sid, s.id);
+  /**
+   * Takes a worker slot at once, so concurrent requests cannot all pass the capacity check. The slot is given back when
+   * the job's analysis is queued (from then on the pool's backlog counts it) or when creating the job fails (Codex R7-2).
+   */
+  reserve(max: number): (() => void) | null {
+    if (this.pool.backlog + this.#reserved >= max) return null;
+    this.#reserved++;
+    let held = true;
+    return () => { if (held) { held = false; this.#reserved--; } };
   }
 
-  async createSample(sid: string, sampleId: unknown) {
+  /** First visit: queue the samples marked `seed` while capacity lasts; under load a new visitor starts with fewer. */
+  async seed(sid: string, max: number) {
+    for (const s of (await this.samples()).filter((x) => x.seed)) {
+      const slot = this.reserve(max);
+      if (!slot) return;
+      try { await this.createSample(sid, s.id, slot); } catch (e) { slot(); throw e; }
+    }
+  }
+
+  async createSample(sid: string, sampleId: unknown, slot?: () => void) {
     const s = (await this.samples()).find((x) => x.id === sampleId);
     if (!s) throw new HttpError(404, 'no-sample', 'Unknown sample.');
     const bytes = new Uint8Array(await readFile(path.join(this.samplesDir, path.basename(s.file))));
-    return this.createJob(sid, { bytes, filename: s.intake.filename ?? path.basename(s.file), intake: s.intake, sample: s.id });
+    return this.createJob(sid, { bytes, filename: s.intake.filename ?? path.basename(s.file), intake: s.intake, sample: s.id }, slot);
   }
 
   // ---------- jobs ----------
 
-  async createJob(sid: string, input: { bytes: Uint8Array; filename: string; intake: unknown; sample?: string }) {
+  async createJob(sid: string, input: { bytes: Uint8Array; filename: string; intake: unknown; sample?: string }, slot?: () => void) {
     if (!input.bytes.length) throw new HttpError(400, 'empty', 'The file is empty.');
     if (input.bytes.length > MAX_BYTES) throw new HttpError(413, 'too-large', `The file is larger than ${MAX_BYTES / 1024 / 1024} MB.`);
     const kind = sniff(input.bytes);
@@ -181,7 +198,7 @@ export class Service {
         [jid, sid, intake.filename, input.sample ?? null, kind, input.bytes, sha(input.bytes), JSON.stringify(intake)]);
       await this.#event(q, jid, 'received', { filename: intake.filename, bytes: input.bytes.length, kind, sourceSha256: sha(input.bytes), intake, sample: input.sample ?? null });
     });
-    this.#bg(this.#analyse(jid));
+    this.#bg(this.#analyse(jid, slot));
     return jid;
   }
 
@@ -191,13 +208,16 @@ export class Service {
     return new Uint8Array(j.source);
   }
 
-  async #analyse(jid: string) {
-    const [job] = await this.db.q<Pick<JobRow, 'intake'>>('select intake from jobs where id = $1', [jid]);
-    if (!job) return;
+  async #analyse(jid: string, slot?: () => void) {
+    const [job] = await this.db.q<Pick<JobRow, 'intake'>>('select intake from jobs where id = $1', [jid]).catch((e) => { slot?.(); throw e; });
+    if (!job) { slot?.(); return; }
     let res: AnalyseResult;
     try {
-      res = await this.pool.run<AnalyseResult>(async () => ({ type: 'analyse', bytes: await this.#source(jid) }));
+      const run = this.pool.run<AnalyseResult>(async () => ({ type: 'analyse', bytes: await this.#source(jid) }));
+      slot?.(); // the pool's backlog counts it now
+      res = await run;
     } catch (e) {
+      slot?.();
       const err = e as TaskError;
       await this.db.tx(async (q) => {
         await q(`update jobs set status = 'failed', error = $2 where id = $1`, [jid, err.message]);
@@ -247,6 +267,14 @@ export class Service {
       }
       if (o.onlyIfChanged && job.plan && signature(job.plan) === signature(p) && job.prediction?.top === pred.top) {
         await q('update jobs set prediction = $2::jsonb, plan = $3::jsonb where id = $1', [jid, JSON.stringify(pred), JSON.stringify(p)]);
+        return null;
+      }
+      if (o.bump && job.revision >= MAX_REVISIONS) {
+        // Session-wide changes count against the same limit as direct ones. At the limit the job is closed, so nothing
+        // obsolete stays approvable and nothing more is stored for it (Codex R7-5).
+        await this.#supersede(q, jid, o.reason);
+        await q(`update jobs set status = 'rejected', error = $2 where id = $1`, [jid, 'Changed too many times. Upload it again to continue.']);
+        await this.#event(q, jid, 'change-limit', { reason: o.reason, revision: job.revision });
         return null;
       }
       const revision = job.revision + (o.bump ? 1 : 0);
@@ -394,16 +422,18 @@ export class Service {
       if (p.status === 'released' || (p.status === 'approved' && this.#executing.has(p.id))) return null;
       const refuse = (status: number, code: string, message: string) => { refused = { proposal: p.id, error: new HttpError(status, code, message) }; return null; };
       if (job.status !== 'ready') return refuse(409, 'closed', `This job is already ${job.status}.`);
-      // Approved but its release never finished (the final write failed): approving again resumes it (Codex R4-3).
-      if (p.status === 'approved' && p.revision === job.revision) { this.#executing.add(claimed = p.id); return p; }
-      if (p.status === 'superseded' || p.revision !== job.revision) return refuse(409, 'superseded', 'This proposal was replaced after the job changed. Review the current one.');
-      if (p.status !== 'prepared') return refuse(409, 'not-ready', p.status === 'failed' ? 'This proposal failed verification and cannot be approved.' : 'This proposal is not ready yet.');
+      // Approved but its release never finished (the final write failed): approving again resumes it (Codex R4-3), after
+      // the same checks as a first approval, because memory or the roll may have moved meanwhile (Codex R7-4).
+      const resume = p.status === 'approved' && p.revision === job.revision;
+      if (resume) { /* checked below */ } else if (p.status === 'superseded' || p.revision !== job.revision) return refuse(409, 'superseded', 'This proposal was replaced after the job changed. Review the current one.');
+      else if (p.status !== 'prepared') return refuse(409, 'not-ready', p.status === 'failed' ? 'This proposal failed verification and cannot be approved.' : 'This proposal is not ready yet.');
       if (body.artifactSha256 !== p.artifact_sha256) return refuse(409, 'artifact-mismatch', 'The approval does not match the prepared artifact.');
       if (p.policy_version !== POLICY_VERSION || p.model_version !== this.model.version) return refuse(409, 'policy-changed', 'Policy or model changed since this was prepared.');
       if (!p.artifact || sha(p.artifact) !== p.artifact_sha256 || bindingHash(job, p) !== p.binding_hash) return refuse(409, 'binding-mismatch', 'Stored artifact does not match its binding.');
       // Memory or roll may have moved since this was prepared, and reconciling other jobs takes time: approve only what
       // RollCue would still decide right now (Codex R5-1).
       if (signature((await this.#freshPlan(q, job)).p) !== signature(job.plan)) return refuse(409, 'superseded', 'RollCue’s reading of this job changed after a correction or setting. Review the current decision.');
+      if (resume) { this.#executing.add(claimed = p.id); return p; }
       const by = 'operator:' + sha(sid).slice(0, 8);
       const [row] = await q<ProposalRow>(`update proposals set status = 'approved', approved_at = now(), approved_by = $2 where id = $1 returning *`, [p.id, by]);
       await this.#event(q, jid, 'approved', { proposal: p.id, artifactSha256: p.artifact_sha256, bindingHash: p.binding_hash, by });

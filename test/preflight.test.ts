@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { PDFDocument, PDFName } from 'pdf-lib';
-import { makeFile, type FileSpec } from '../dataset/gen.ts';
+import { makeFile, genCase, type FileSpec } from '../dataset/gen.ts';
 import { HANDSET, handIntake } from '../dataset/handset.ts';
 import { inspect, Rejected, sniff, MAX_SIDE_MM } from '../src/inspect.ts';
 import { featurize, type Intake } from '../src/features.ts';
@@ -172,9 +172,14 @@ test('a correction that overrides the model on another job is flagged for checki
   assert.ok(p.evidence.reasons.some((r) => r.includes('only because you corrected other.pdf') && r.includes('the model alone reads banner')));
 });
 
-test('correcting a banner does not turn a different-shaped poster into a banner (Codex R2-2 pair)', () => {
-  const cases = JSON.parse(readFileSync('dataset/cases.json', 'utf8')).cases as Array<{ id: string; intent: 'banner' | 'poster'; x: number[] }>;
-  const banner = cases.find((c) => c.id === 'banner-2203')!, poster = cases.find((c) => c.id === 'poster-1418')!;
+test('correcting a banner does not turn a different-shaped poster into a banner (Codex R2-2 pair)', async () => {
+  // Features come from the real files through the real extractor, not from the cached dataset (Codex R7-9).
+  const mk = async (intent: 'banner' | 'poster', seed: number) => {
+    const g = genCase(intent, seed);
+    const { inspection } = await inspect(await makeFile(g.file));
+    return { id: g.id, x: featurize(inspection, g.intake) };
+  };
+  const banner = await mk('banner', 2203), poster = await mk('poster', 1418);
   assert.notDeepEqual(banner.x, poster.x, 'a raster without density keeps its pixel aspect ratio');
   const mem = memoryOf([{ jobId: banner.id, filename: 'b.png', intent: 'banner', x: banner.x }]);
   assert.equal(predict(model, poster.x, mem).top, predict(model, poster.x).top);

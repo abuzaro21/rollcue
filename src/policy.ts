@@ -232,6 +232,8 @@ export function plan(ins: Inspection, intake: Intake, pred: Prediction, params: 
     const options: Option[] = [{ id: 'send-notice', label: 'Return to customer', detail: 'Approve the prepared notice', recommended: true, params: {} }];
     if (first.id === 'resolution') options.push({ id: 'accept-lowres', label: 'Print anyway', detail: 'Soft print accepted by operator', params: { acceptLowRes: true } });
     if (first.id === 'cut' && (intent === 'sticker' || intent === 'label') && !ins.cut) options.push({ id: 'rect-cut', label: 'Cut as a rectangle', detail: 'Ignore the shape, cut at the trim', params: { rectCut: true } });
+    // A chosen size that cannot be made must still be undoable from the return card (Codex R7-6).
+    if (params.targetW) options.push({ id: 'size-change', label: 'Change size', detail: `You chose ${size(target.w, target.h)}`, params: { targetW: null, targetH: null } });
     const asks: Record<string, string> = {
       resolution: `Please send the artwork at ${floor.warn} ppi or more at ${size(target.w, target.h)}, or as vector PDF.`,
       cut: intent === 'sticker' || intent === 'label' ? 'Please send the artwork with a stroked spot colour named exactly "CutContour", or as a PNG with a transparent background.' : 'Please send the artwork without the cut path; this job is printed and trimmed, not cut to shape.',

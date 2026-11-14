@@ -120,10 +120,10 @@ export function createApp(o: AppOpts) {
       if (!sessions.take(ip)) throw new HttpError(429, 'rate-limited', 'Too many new sessions from this address. Wait a few minutes.');
       sess = (await svc.session(null, true))!;
       res.setHeader('set-cookie', `${COOKIE}=${sess.id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${48 * 3600}${o.secureCookies ? '; Secure' : ''}`);
-      if (svc.pool.backlog < 2 * MAX_BACKLOG) await svc.seed(sess.id); // under load a new visitor starts with an empty queue
+      await svc.seed(sess.id, 2 * MAX_BACKLOG); // sample files are small, so seeding may use more slots than uploads
     }
     const sid = sess.id;
-    const admit = () => { if (svc.pool.backlog >= MAX_BACKLOG) throw new HttpError(503, 'busy', 'RollCue is busy preparing other jobs. Try again in a minute.'); };
+    const admit = () => svc.reserve(MAX_BACKLOG) ?? (() => { throw new HttpError(503, 'busy', 'RollCue is busy preparing other jobs. Try again in a minute.'); })();
     const jid = seg[1], pid = seg[3];
 
     switch (route) {
@@ -134,14 +134,19 @@ export function createApp(o: AppOpts) {
       case 'GET /jobs': return send(res, 200, await svc.list(sid));
       case 'POST /jobs': {
         if (!uploads.take(ip)) throw new HttpError(429, 'rate-limited', 'Too many uploads. Wait a minute.');
-        admit();
-        const filename = decodeURIComponent(String(req.headers['x-filename'] ?? 'upload'));
-        let intake: unknown = {};
-        try { intake = JSON.parse(decodeURIComponent(String(req.headers['x-intake'] ?? '%7B%7D'))); } catch { throw new HttpError(400, 'bad-intake', 'Intake header is not valid JSON.'); }
-        const bytes = new Uint8Array(await readBody(req, MAX_BYTES));
-        return send(res, 201, { id: await svc.createJob(sid, { bytes, filename, intake }) });
+        const slot = admit(); // reserved before the body is read (Codex R7-2)
+        try {
+          const filename = decodeURIComponent(String(req.headers['x-filename'] ?? 'upload'));
+          let intake: unknown = {};
+          try { intake = JSON.parse(decodeURIComponent(String(req.headers['x-intake'] ?? '%7B%7D'))); } catch { throw new HttpError(400, 'bad-intake', 'Intake header is not valid JSON.'); }
+          const bytes = new Uint8Array(await readBody(req, MAX_BYTES));
+          return send(res, 201, { id: await svc.createJob(sid, { bytes, filename, intake }, slot) });
+        } catch (e) { slot(); throw e; }
       }
-      case 'POST /samples/:id': admit(); return send(res, 201, { id: await svc.createSample(sid, seg[1]) });
+      case 'POST /samples/:id': {
+        const slot = admit();
+        try { return send(res, 201, { id: await svc.createSample(sid, seg[1], slot) }); } catch (e) { slot(); throw e; }
+      }
       case 'GET /jobs/:id': return send(res, 200, await svc.view(sid, jid));
       case 'GET /jobs/:id/source.png': return send(res, 200, await svc.sourcePreview(sid, jid), { 'content-type': 'image/png', 'cache-control': 'private, max-age=3600' });
       case 'POST /jobs/:id/decide': return send(res, 200, await svc.decide(sid, jid, (await json(req)) as never));

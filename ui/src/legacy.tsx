@@ -83,6 +83,7 @@ function Legacy() {
   });
 
   const plan = job?.plan, ins = job?.inspection, p = job?.proposal;
+  const notice = p?.kind === 'return-notice' && plan?.decision.kind === 'return' ? plan.decision.notice : null;
   const missing = [!saved && 'save the job ticket', !ran && 'run preflight', !cutSet && 'apply cut settings'].filter(Boolean);
   return (
     <div className="lg">
@@ -173,7 +174,10 @@ function Legacy() {
             {missing.length > 0 && <p className="lg-missing">Before output: {missing.join(', ')}.</p>}
             {generated && p && (
               <div className="lg-output">
-                {p.kind === 'production' ? <img key={p.id} src={p.previewUrl} alt="Output preview" onLoad={() => setShownPreview(p.id)} /> : <p>Policy result: return to customer. A return notice was generated.</p>}
+                {p.kind === 'production' ? <img key={p.id} src={p.previewUrl} alt="Output preview" onLoad={() => setShownPreview(p.id)} /> : notice ? (
+                  // The operator reads the notice being approved, as on the decision card (Codex R7-8).
+                  <blockquote className="notice-text"><strong>{notice.title}</strong>{notice.lines.map((l) => <span key={l}>{l}</span>)}<em>{notice.ask}</em></blockquote>
+                ) : <p>Policy result: return to customer.</p>}
                 <table className="lg-table kv"><tbody>
                   <tr><td>Output</td><td>{p.kind}</td></tr>
                   <tr><td>Status</td><td>{p.status}</td></tr>
@@ -182,7 +186,7 @@ function Legacy() {
                 </tbody></table>
                 <div className="lg-actions">
                   <a href={p.downloadUrl}>Download PDF</a>
-                  <button onClick={send} disabled={p.status !== 'prepared' || (p.kind === 'production' && shownPreview !== p.id)}>Approve &amp; send to production</button>
+                  <button onClick={send} disabled={p.status !== 'prepared' || (p.kind === 'production' ? shownPreview !== p.id : !notice)}>Approve &amp; send to production</button>
                 </div>
               </div>
             )}
