@@ -25,23 +25,46 @@ const COOKIE = 'rc_sid';
 export type AppOpts = { service: Service; publicDir: string; trustProxyHops: number; testHooks?: boolean; secureCookies?: boolean };
 
 /** Per-IP token buckets: uploads are expensive, everything else is cheap. */
-class Limiter {
+export class Limiter {
   #b = new Map<string, { t: number; n: number }>();
   rate: number; burst: number;
   constructor(rate: number, burst: number) { this.rate = rate; this.burst = burst; }
   take(key: string, now = Date.now()) {
     const b = this.#b.get(key) ?? { t: now, n: this.burst };
     b.n = Math.min(this.burst, b.n + ((now - b.t) / 1000) * this.rate); b.t = now;
-    if (this.#b.size > 10_000) this.#b.clear(); // shortcut: crude memory cap, fine for one small instance
-    if (b.n < 1) { this.#b.set(key, b); return false; }
-    b.n -= 1; this.#b.set(key, b); return true;
+    const ok = b.n >= 1;
+    if (ok) b.n -= 1;
+    this.#b.delete(key); this.#b.set(key, b); // keep the map in least-recently-used order
+    if (this.#b.size > 10_000) this.#evict(now);
+    return ok;
+  }
+  // Memory cap without resetting anyone's budget: a bucket that has refilled is the same as no bucket, so drop those
+  // first; only if that is not enough, drop the least recently used (the old code cleared every bucket at once).
+  #evict(now: number) {
+    for (const [k, b] of this.#b) if (b.n + ((now - b.t) / 1000) * this.rate >= this.burst) this.#b.delete(k);
+    for (const k of this.#b.keys()) { if (this.#b.size <= 9_000) break; this.#b.delete(k); }
   }
 }
 
+/** The address a limit applies to. IPv4 as is; IPv6 by its /64, which one subscriber usually holds whole. */
+export function addressKey(ip: string) {
+  const v4 = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip);
+  if (v4) return v4[1];
+  if (!ip.includes(':')) return ip;
+  const [head, tail] = ip.toLowerCase().split('%')[0].split('::');
+  const h = head ? head.split(':') : [], t = tail ? tail.split(':') : [];
+  const g = tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t];
+  if (g.length !== 8 || !g.every((x) => /^[0-9a-f]{1,4}$/.test(x))) return ip;
+  return `${g.slice(0, 4).map((x) => parseInt(x, 16).toString(16)).join(':')}::/64`;
+}
+
 export function clientIp(req: http.IncomingMessage, hops: number): string {
+  if (hops <= 0) return addressKey(req.socket.remoteAddress ?? 'unknown');
   const xff = String(req.headers['x-forwarded-for'] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   // With N trusted proxies the client is the Nth address from the right; anything further left is client-controlled.
-  return (hops > 0 && xff.length >= hops ? xff[xff.length - hops] : req.socket.remoteAddress) ?? 'unknown';
+  // A shorter chain did not come through those proxies: it shares one bucket instead of getting the forwarding
+  // proxy's socket address, which differs per proxy connection and would multiply the budget.
+  return xff.length >= hops ? addressKey(xff[xff.length - hops]) : 'short-chain';
 }
 
 export function createApp(o: AppOpts) {
