@@ -13,7 +13,7 @@ export type Act = {
   busy: boolean;
 };
 
-const pct = (v: number) => `${Math.round(v * 100)}%`;
+const pct = (v: number) => (v > 0 && v < 0.005 ? "<1%" : `${Math.round(v * 100)}%`);
 const short = (h?: string | null) => (h ? h.slice(0, 8) : '');
 const lower = (i: string) => INTENT_LABEL[i as Intent].toLowerCase();
 

@@ -112,15 +112,15 @@
  },
  "evidenceGate": {
   "syntheticTest": {
-   "flaggedRate": 0.152,
+   "flaggedRate": 0.166,
    "confident": 551,
    "wrongConfident": 8,
    "wrongConfidentFlagged": 4,
    "rightConfident": 543,
-   "rightConfidentFlagged": 60
+   "rightConfidentFlagged": 69
   },
   "handset": {
-   "flaggedRate": 0.281,
+   "flaggedRate": 0.219,
    "confident": 24,
    "wrongConfident": 1,
    "wrongConfidentFlagged": 1,

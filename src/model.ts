@@ -99,7 +99,9 @@ export function predict(m: ModelFile, x: number[], mem?: Memory): Prediction {
   const [t, s] = order;
   const w = (k: number, j: number) => m.W[k][j];
   const diff = z.map((zj, j) => ({ feature: m.features[j], label: FEATURES[j].label, value: x[j], weight: round((w(t, j) - w(s, j)) * zj) }));
-  const strongest = (arr: Evidence[], sign: 1 | -1) => arr.filter((e) => e.weight * sign > 0.05).sort((u, v) => sign * (v.weight - u.weight)).slice(0, 5);
+  // Only facts present in this job are shown as evidence; an absent feature still moves a linear model, but naming it
+  // ("Media: Vinyl" when no media was given) would mislead the operator.
+  const strongest = (arr: Evidence[], sign: 1 | -1) => arr.filter((e) => e.value !== 0 && e.weight * sign > 0.05).sort((u, v) => sign * (v.weight - u.weight)).slice(0, 5);
   const avg = (j: number) => m.classes.reduce((acc, _, k) => acc + w(k, j), 0) / m.classes.length;
   const forEach = Object.fromEntries(m.classes.map((c, k) => [c, strongest(z.map((zj, j) => ({
     feature: m.features[j], label: FEATURES[j].label, value: x[j], weight: round((w(k, j) - avg(j)) * zj),

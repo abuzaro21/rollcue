@@ -115,7 +115,7 @@ export type FileSpec = {
 export async function makeFile(f: FileSpec): Promise<Uint8Array> {
   const r = rng(f.seed);
   if (f.format === 'pdf') {
-    const doc = await PDFDocument.create();
+    const doc = await PDFDocument.create({ updateMetadata: false }); // no timestamps: same seed, same bytes
     const b = f.bleedMm ?? 0;
     const page = doc.addPage([(f.wMm + 2 * b) * PT, (f.hMm + 2 * b) * PT]);
     // Layers are drawn over the bleed area too when art runs to the edge.
