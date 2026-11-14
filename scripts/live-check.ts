@@ -4,7 +4,7 @@
 // The state file holds a session cookie, so keep it outside the repository. Prints one line per check, exits 1 on any failure.
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { PDFDocument } from 'pdf-lib';
+import { pdfStructure } from '../src/inspect.ts';
 
 const [base, mode, stateFile] = process.argv.slice(2);
 if (!base || !['checks', 'resume'].includes(mode) || !stateFile) { console.error('usage: live-check.ts <base-url> checks|resume <state-file>'); process.exit(2); }
@@ -19,7 +19,7 @@ function client(cookie = '') {
     const sc = res.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0];
     const ct = res.headers.get('content-type') ?? '';
     const out = ct.includes('json') ? await res.json() : new Uint8Array(await res.arrayBuffer());
-    seen.push(JSON.stringify([...res.headers]), ct.includes('json') ? JSON.stringify(out) : '');
+    seen.push(JSON.stringify([...res.headers]), ct.includes('json') ? JSON.stringify(out) : Buffer.from(out as Uint8Array).toString('latin1')); // binary bodies too (Codex R8-8)
     return { status: res.status, headers: res.headers, body: out as any };
   };
   return { call, get: (p: string) => call('GET', p), post: (p: string, b: unknown = {}) => call('POST', p, b), cookie: () => cookie };
@@ -64,8 +64,9 @@ if (mode === 'checks') {
   check(wrong.status === 409, 'approval bound to the artifact hash', `${wrong.status} ${wrong.body.error}`);
   const ok = await op.post(`/api/jobs/${sticker.id}/approve`, { proposalId: sticker.proposal.id, artifactSha256: sticker.proposal.artifact_sha256 });
   check(ok.status === 200 && ok.body.status === 'released' && ok.body.proposal.ticket.verification.every((c: any) => c.pass), 'approval releases a verified ticket', `${ok.status} ${ok.body.status}`);
-  let pages = 0; try { pages = (await PDFDocument.load(pdf)).getPageCount(); } catch { /* counted below */ }
-  check(pages >= 1 && Buffer.from(pdf).includes('/CutContour'), 'released artifact parses and carries a CutContour separation', `${pages} page(s)`);
+  // The same structural reader the release gate uses: a separation named exactly CutContour that is stroked, closed and painted (Codex R8-8).
+  const st = await pdfStructure(pdf).catch(() => null);
+  check(!!st && st.pages >= 1 && !!st.cut?.exactName && st.cut.stroked && !st.cut.filled && !st.cut.hidden && st.cut.loops > 0 && st.cut.openLoops === 0, 'released artifact parses and strokes a closed CutContour separation', st ? `${st.pages} page(s), ${st.cut?.loops ?? 0} cut loop(s)` : 'unreadable');
 
   const amb = await prepared(op, 'stickers-final');
   check(amb.prediction?.top === 'sticker' && amb.plan.evidence.thin === true, 'ambiguous intent flagged as thin evidence');

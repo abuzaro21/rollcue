@@ -12,3 +12,4 @@ film/tts/
 .env.*
 data/
 docs/reviews/raw/
+film/.venv/

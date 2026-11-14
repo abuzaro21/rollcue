@@ -116,12 +116,19 @@ export class Service {
       if (s) return { ...s, created: false };
     }
     if (!create) return null;
-    const [{ n }] = await this.db.q<{ n: number }>('select count(*)::int as n from sessions');
-    if (n >= MAX_SESSIONS) throw new HttpError(503, 'busy', 'RollCue has too many visitors right now. Try again later.');
-    const nid = randomBytes(24).toString('base64url');
-    await this.db.q('insert into sessions (id, roll) values ($1, $2::jsonb)', [nid, JSON.stringify(DEFAULT_ROLL)]);
-    return { id: nid, created: true, roll: DEFAULT_ROLL };
+    // Count and insert one at a time, so concurrent requests cannot both pass the ceiling (Codex R8-6).
+    // shortcut: an in-process lock, enough for the single instance the free plan runs; several instances would need a database lock.
+    const turn = this.#creating.then(async () => {
+      const [{ n }] = await this.db.q<{ n: number }>('select count(*)::int as n from sessions');
+      if (n >= MAX_SESSIONS) throw new HttpError(503, 'busy', 'RollCue has too many visitors right now. Try again later.');
+      const nid = randomBytes(24).toString('base64url');
+      await this.db.q('insert into sessions (id, roll) values ($1, $2::jsonb)', [nid, JSON.stringify(DEFAULT_ROLL)]);
+      return nid;
+    });
+    this.#creating = turn.catch(() => undefined);
+    return { id: await turn, created: true, roll: DEFAULT_ROLL };
   }
+  #creating: Promise<unknown> = Promise.resolve();
 
   async setRoll(sid: string, rollWidthMm: unknown) {
     if (typeof rollWidthMm !== 'number' || !Number.isFinite(rollWidthMm) || rollWidthMm < 300 || rollWidthMm > 5000) throw new HttpError(400, 'bad-params', 'Roll width must be between 300 and 5000 mm.');

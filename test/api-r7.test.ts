@@ -7,6 +7,7 @@ import { createCanvas } from '@napi-rs/canvas';
 import { PDFDocument, PDFName } from 'pdf-lib';
 import { start } from '../src/main.ts';
 import { pdfStructure, Rejected } from '../src/inspect.ts';
+import { addressKey, Limiter } from '../src/http.ts';
 
 let app: Awaited<ReturnType<typeof start>>;
 let base = '';
@@ -194,8 +195,72 @@ test('R7b-3 malformed colour operands never paint a cut', async () => {
     contents(d, Buffer.from(`/CS0 CS ${ops} 1 w 20 20 160 160 re S`));
   });
   assert.equal((await pdfStructure(await cutFile('0 1 SCN'))).cut?.stroked, true, 'control: a well-formed CutContour tint is found');
-  for (const ops of ['0 0 SCN 0 1 /P SCN', '0 SCN']) {
-    const cut = (await pdfStructure(await cutFile(ops))).cut;
-    assert.ok(!(cut?.name === 'CutContour' && cut.stroked), ops);
+  // Since R8-2 a malformed colour is refused outright instead of being read as no colour.
+  for (const ops of ['0 0 SCN 0 1 /P SCN', '0 SCN']) await rejects(pdfStructure(await cutFile(ops)), 'malformed');
+});
+
+// ---------- R8: final review ----------
+
+test('R8-1 a second compression layer is refused before any parser decodes it', async () => {
+  const z = deflateSync(deflateSync(Buffer.alloc(80 * 1024 * 1024, 0x20)));
+  for (const names of [['FlateDecode', 'FlateDecode'], ['Fl', 'FlateDecode']]) {
+    const bomb = await pdfWith((d) => contents(d, z, { Filter: d.context.obj(names.map((n) => PDFName.of(n))) }));
+    await rejects(pdfStructure(bomb), 'unsupported');
   }
+  const indirect = await pdfWith((d) => contents(d, z, { Filter: d.context.register(d.context.obj([PDFName.of('FlateDecode'), PDFName.of('FlateDecode')])) }));
+  await rejects(pdfStructure(indirect), 'unsupported');
+  const one = await pdfWith((d) => contents(d, deflateSync(Buffer.from('0 0 m 10 10 l S')), { Filter: 'FlateDecode' }));
+  assert.equal((await pdfStructure(one)).pages, 1, 'control: one Flate layer is fine');
+});
+
+test('R8-2 malformed colour or path operands are refused, well-formed ones still read', async () => {
+  const sep = (ops: string) => pdfWith((d) => {
+    const fn = d.context.register(d.context.obj({ FunctionType: 2, Domain: [0, 1], C0: [0, 0, 0, 0], C1: [0, 1, 0, 0], N: 1 }));
+    d.getPage(0).node.set(PDFName.of('Resources'), d.context.obj({ ColorSpace: { CS0: [PDFName.of('Separation'), PDFName.of('CutContour'), PDFName.of('DeviceCMYK'), fn] } }));
+    contents(d, Buffer.from(`/CS0 CS ${ops}`));
+  });
+  const bad = ['0 SCN 1 (bad) SCN 20 20 160 160 re S', '1 SCN 20 20 160 160 (bad) re S', '1 SCN [20] 20 m 180 180 l S', '1 SCN 20 20 160 re S', '1 SCN 1 0 0 1 0 0 0 cm 20 20 160 160 re S'];
+  for (const ops of bad) await rejects(pdfStructure(await sep(ops)), 'malformed');
+  const ok = (await pdfStructure(await sep('1 SCN BT (text ok) Tj ET [3 2] 0 d 20 20 160 160 re S'))).cut;
+  assert.ok(ok?.stroked && ok.loops === 1, 'control: strings and arrays elsewhere, and a well-formed cut');
+});
+
+test('R8-4 filling the limiter with other keys does not reset a drained bucket', () => {
+  const l = new Limiter(1 / 30, 10), t = 5_000_000;
+  for (let i = 0; i < 10; i++) l.take('victim', t);
+  assert.equal(l.take('victim', t), false);
+  for (let i = 0; i < 9_999; i++) l.take(`k${i}`, t); // the table now holds 10,000 buckets, all refilling
+  assert.equal(l.take('victim', t), false, 'still drained');
+  let fresh = 0;
+  for (let i = 0; i < 50; i++) if (l.take(`new${i}`, t)) fresh++;
+  assert.equal(fresh, 10, 'unseen keys share one bucket while every tracked bucket is refilling');
+  let later = 0;
+  for (let i = 0; i < 50; i++) if (l.take(`later${i}`, t + 300_000)) later++;
+  assert.equal(later, 50, 'once buckets have refilled they are dropped and unseen keys get their own again');
+});
+
+test('R8-5 every spelling of one address gives one key; garbage shares one key', () => {
+  const same = (k: string, ...ips: string[]) => { for (const ip of ips) assert.equal(addressKey(ip), k, ip); };
+  same('2001:db8:1:2::/64', '2001:db8:1:2::192.0.2.1', '2001:db8:1:2::192.0.2.2', '2001:0DB8:0001:0002:0:0:0:9', '2001:db8:1:2::1%eth0');
+  same('192.0.2.1', '192.0.2.1', '::ffff:192.0.2.1', '::FFFF:c000:201', '0:0:0:0:0:ffff:192.0.2.1', '::ffff:192.0.2.1%1');
+  same('invalid', 'nope', '1.2.3', '256.1.1.1', '2001:db8::1::2', '2001:db8:1:2::999.1.1.1', 'unknown', '');
+  assert.notEqual(addressKey('::ffff:c000:201'), addressKey('::ffff:c000:202'), 'mapped IPv4 clients stay distinct');
+});
+
+test('R8-6 concurrent new sessions cannot pass the global ceiling', async () => {
+  const s = svc(), q = s.db.q.bind(s.db);
+  const [{ n: before }] = await q<{ n: number }>('select count(*)::int as n from sessions');
+  // Pretend the table already holds 4,999 sessions, and hold the first count so both requests overlap.
+  s.db.q = (async (sql: string, p?: unknown[]) => {
+    if (sql.startsWith('select count(*)::int as n from sessions')) {
+      const [{ n }] = await q<{ n: number }>(sql);
+      await new Promise((ok) => setTimeout(ok, 200));
+      return [{ n: n - before + 4_999 }];
+    }
+    return q(sql, p as never);
+  }) as typeof s.db.q;
+  try {
+    const r = await Promise.allSettled([s.session(null, true), s.session(null, true)]);
+    assert.deepEqual(r.map((x) => x.status).sort(), ['fulfilled', 'rejected'], 'one is created, the other is told RollCue is busy');
+  } finally { s.db.q = q; }
 });

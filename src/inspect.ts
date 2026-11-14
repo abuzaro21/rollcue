@@ -276,13 +276,15 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
   const onStack = new Set<PDFStream>();
 
   const exec = (content: string, res: PDFDict | undefined, gs0: Gs, hidden: boolean, depth: number) => {
-    const re = /\((?:\\.|[^\\)])*\)|<<|>>|<[0-9a-fA-F\s]*>|\/[^\s/<>()[\]{}%]*|%[^\r\n]*|\bBI\b[\s\S]*?\bEI\b|[^\s/<>()[\]{}%]+/g;
+    const re = /\((?:\\.|[^\\)])*\)|<<|>>|<[0-9a-fA-F\s]*>|\/[^\s/<>()[\]{}%]*|%[^\r\n]*|\bBI\b[\s\S]*?\bEI\b|[[\]{}]|[^\s/<>()[\]{}%]+/g;
     const stack: Gs[] = [];
     let gs: Gs = { ...gs0 };
     let ops: string[] = [];
     let path: Array<{ pts: number[][]; segs: number; closed: boolean }> = [];
     const cur = () => path.at(-1);
     const num = (i: number) => Number(ops[ops.length - i]);
+    // Path and painting operators take exactly their numbers; anything else is refused rather than guessed (Codex R8-2).
+    const args = (n: number) => { if (ops.length !== n || !ops.every((o) => NUMBER.test(o))) throw new Rejected('malformed', 'The PDF has a malformed drawing instruction. Please re-export it.'); };
     const pt = (x: number, y: number) => [gs.ctm[0] * x + gs.ctm[2] * y + gs.ctm[4], gs.ctm[1] * x + gs.ctm[3] * y + gs.ctm[5]];
     const lastName = () => { for (let i = ops.length - 1; i >= 0; i--) if (ops[i].startsWith('/')) return decodeName(ops[i]); return ''; };
     const runPattern = (name: string | null) => {
@@ -320,7 +322,7 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
     for (const mt of content.matchAll(re)) {
       if (++tokens > MAX_TOKENS) throw new Rejected('too-complex', 'The PDF page is too complex to inspect.');
       const t = mt[0];
-      if (t.startsWith('/') || /^[+-]?(\d+\.?\d*|\.\d+)$/.test(t)) { ops.push(t); continue; }
+      if (t.startsWith('/') || NUMBER.test(t)) { ops.push(t); continue; }
       if (t.startsWith('BI')) {
         // Inline images are decoded by the renderer too, so their declared size counts against the same budget (Codex R6-5).
         const head = t.slice(0, t.search(/\sID[\s]/) >>> 0);
@@ -328,7 +330,11 @@ export function scanColourUse(doc: PDFDocument, streams: PDFStream[], resources:
         if (inlinePixels > pixelBudget) throw new Rejected('too-large', `The PDF's images total more than ${MAX_PDF_IMAGE_PIXELS / 1e6} megapixels.`); // shared with image objects (Codex R7-7)
         continue;
       }
-      if (t[0] === '(' || t[0] === '<' || t[0] === '%' || t === '>>') continue;
+      if (t[0] === '%') continue;
+      if ('(<>[]{}'.includes(t[0])) { ops.push('?'); continue; } // strings, dictionaries and arrays are operands too: never dropped
+      if (Object.hasOwn(ARITY, t)) args(ARITY[t]);
+      if (/^(SC|SCN)$/.test(t) && gs.sCs && gs.sCs !== PATTERN) args(gs.sCs.length);
+      if (/^(sc|scn)$/.test(t) && gs.fCs && gs.fCs !== PATTERN) args(gs.fCs.length);
       switch (t) {
         case 'q': stack.push(gs); gs = { ...gs }; break;
         case 'Q': gs = stack.pop() ?? gs; break;
@@ -389,11 +395,15 @@ function inflatedSize(body: Uint8Array, limit: number): Promise<number> {
   });
 }
 
+const ARITY: Record<string, number> = { cm: 6, m: 2, l: 2, c: 6, v: 4, y: 4, re: 4 };
+const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)$/;
 const BOMB_FILTERS = /\/(LZWDecode|LZW|RunLengthDecode|RL)\b/;
 function checkFilters(names: string[]) {
   // Filters RollCue cannot bound before decoding are refused; an ASCII wrapper would hide Flate from the pre-pass (Codex R6-4).
   if (names.some((n) => BOMB_FILTERS.test(n))) throw new Rejected('unsupported', 'The PDF uses an old compression method (LZW or RunLength). Please re-export it.');
   const flate = names.findIndex((n) => /^\/(FlateDecode|Fl)$/.test(n));
+  // The pre-pass measures one layer of compression; a second layer would expand unmeasured inside the parser (Codex R8-1).
+  if (names.filter((n) => /^\/(FlateDecode|Fl)$/.test(n)).length > 1) throw new Rejected('unsupported', 'The PDF compresses the same data twice. Please re-export it.');
   if (flate > 0 && names.slice(0, flate).some((n) => /^\/(ASCII85Decode|A85|ASCIIHexDecode|AHx)$/.test(n))) throw new Rejected('unsupported', 'The PDF wraps compressed data in a text encoding. Please re-export it.');
 }
 
@@ -410,6 +420,8 @@ export async function pdfInflateBudget(bytes: Uint8Array): Promise<{ image: numb
     const start = m.index + m[0].length;
     const dict = text.slice(Math.max(0, m.index - 2048), m.index);
     const o = dict.lastIndexOf(' obj'), own = o >= 0 ? dict.slice(o) : dict; // this stream's dictionary, roughly
+    // A filter held in another object could not be checked here, so it is refused.
+    if (/\/Filter\s*\d+\s+\d+\s+R\b/.test(own) || /\/Filter\s*\[[^\]]*\bR\b/.test(own)) throw new Rejected('unsupported', 'The PDF stores its compression settings indirectly. Please re-export it.');
     const filter = /\/Filter\s*(\[[^\]]*\]|\/[^\s/<>[\]]+)/.exec(own)?.[1] ?? '';
     checkFilters(filter.match(/\/[^\s/<>[\]]+/g) ?? []);
     // Any valid zlib header, not only the common 0x78 one: a small window still inflates (Codex R7-1).
