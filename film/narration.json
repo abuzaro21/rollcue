@@ -1,0 +1,15 @@
+{
+  "voice": "af_heart",
+  "speed": 1.0,
+  "segments": [
+    { "id": "arrive", "text": "A new order lands. The file is called poster for jars. Before anyone asks, RollCue reads it: the size, the quantity, the label stock, the customer's note. These are roll labels, not a poster." },
+    { "id": "prepared", "text": "And the work is already done. The production file is prepared, checked, and waiting for one decision. Not a form. Not a dashboard." },
+    { "id": "sticker", "text": "This sticker came in with no cut path, so RollCue traced the contour itself. On one side, the customer's file. On the other, the prepared proof." },
+    { "id": "approve", "text": "Nothing reaches production until I approve, and my approval is bound to this exact file. Released, with every check verified again." },
+    { "id": "pdf", "text": "The real output: a print-ready PDF, with the CutContour line the cutter needs." },
+    { "id": "wrong", "text": "Sometimes it guesses wrong. Stickers final is really one window poster, and RollCue flags the evidence as thin. One tap corrects it. The old proposal is void, and a poster is prepared instead." },
+    { "id": "memory", "text": "The next file like it arrives already read as a poster, from my correction, in this session only." },
+    { "id": "legacy", "text": "The same sticker job, the old way: pick the product, run preflight, choose the cut, type the offset. Nine clicks and three fields, against two clicks." },
+    { "id": "end", "text": "RollCue. The next decision, not another dashboard." }
+  ]
+}
