@@ -143,6 +143,9 @@ export function createApp(o: AppOpts) {
       case 'POST /test/fail-next-release':
         if (!o.testHooks) break;
         svc.failNextRelease = true; return send(res, 200, { ok: true });
+      case 'POST /test/slow-next-prepare':
+        if (!o.testHooks) break;
+        svc.slowNextPrepareMs = 3000; return send(res, 200, { ok: true });
     }
     throw new HttpError(404, 'not-found', 'Not found.');
   }
@@ -152,7 +155,7 @@ export function createApp(o: AppOpts) {
       if (res.headersSent) { res.destroy(); return; }
       if (e instanceof HttpError) return send(res, e.status, { error: e.code, message: e.message });
       console.error('[rollcue] request failed', e);
-      send(res, 500, { error: 'internal', message: 'Something went wrong. Nothing was released.' });
+      send(res, 500, { error: 'internal', message: 'Something went wrong. Reload the job to see its current state.' });
     });
   });
 }

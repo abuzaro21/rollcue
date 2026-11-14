@@ -21,6 +21,7 @@ function App() {
   const [memOpen, setMemOpen] = useState(false);
   const [kick, setKick] = useState(0); // restarts polling after an action leaves the job working
   const [conn, setConn] = useState<'connecting' | 'ok' | 'down'>('connecting');
+  const [preview, setPreview] = useState<{ id: string; ok: boolean } | null>(null);
   const curRef = useRef(current);
   curRef.current = current;
   // A response for a job the operator has already left must never be shown or acted on (Codex R1-2).
@@ -66,16 +67,21 @@ function App() {
       if (ok) setToast({ text: ok, tone: 'ok' });
       await refreshJobs();
     } catch (e) {
-      setToast({ text: e instanceof ApiError ? e.message : 'Something went wrong. Nothing was released.', tone: 'error' });
+      setToast({ text: e instanceof ApiError ? e.message : 'The connection dropped. Showing the job as the server has it now.', tone: 'error' });
+      // Never assume what happened: reload the job as stored and keep polling if it is still working (Codex R4-6, R4-8).
       const id = curRef.current;
-      if (e instanceof ApiError && e.status === 409 && id) { const v = await api.job(id); if (v.id === curRef.current) setJob(v); }
+      if (id) {
+        try { const v = await api.job(id); if (v.id === curRef.current) { setJob(v); if (isWorking(v)) setKick((k) => k + 1); } } catch { /* the poller retries */ }
+      }
     } finally { setBusy(false); }
   };
 
   const nextOpen = jobs.find((j) => j.id !== current && OPEN.has(j.status));
   const job_ = shown;
+  const prop = job_?.proposal;
   const act: Act | null = job_ && {
     busy,
+    preview: !prop || prop.kind !== 'production' ? 'ok' : preview?.id === prop.id ? (preview.ok ? 'ok' : 'error') : 'loading',
     decide: (params, note) => run(async () => {
       const v = await api.decide(job_, params);
       if ('intent' in params) await refreshSession();
@@ -129,7 +135,7 @@ function App() {
       <main className="work">
         {shown ? (
           <>
-            <section className="stage" aria-label="Working object"><Mat job={shown} /></section>
+            <section className="stage" aria-label="Working object"><Mat job={shown} onPreview={(id, ok) => setPreview({ id, ok })} /></section>
             <aside className="side">{act && <Card job={shown} act={act} notice={<DemoContext text={session?.samples.find((s) => s.id === shown.sample)?.context} />} />}</aside>
           </>
         ) : conn !== 'ok' ? (

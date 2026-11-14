@@ -198,6 +198,46 @@ test('a suggested size is a choice, not a setting already applied (Codex R1-4)',
   await expect(page.locator('.headline')).not.toHaveText('What size should this print?');
 });
 
+test('approval waits until the production preview has loaded (Codex R4-5)', async ({ page }) => {
+  let release!: () => void;
+  const held = new Promise<void>((ok) => (release = ok));
+  await page.route('**/proposals/*/preview.png', async (r) => { await held; await r.continue(); });
+  await page.goto('/');
+  await ready(page);
+  await openJob(page, /olive-market-sticker/);
+  const approveBtn = page.getByRole('button', { name: 'Approve and release' });
+  await expect(approveBtn).toBeDisabled();
+  release();
+  await expect(approveBtn).toBeEnabled();
+  await page.unroute('**/proposals/*/preview.png');
+  await page.route('**/proposals/*/preview.png', (r) => r.abort());
+  await page.reload();
+  await ready(page);
+  await openJob(page, /olive-market-sticker/);
+  await expect(page.getByText('The production preview did not load.')).toBeVisible();
+  await expect(approveBtn).toBeDisabled();
+});
+
+test('a stale approval follows the replacement decision without a reload (Codex R4-8)', async ({ page }) => {
+  test.skip(!hooks, 'needs the test hook');
+  await page.goto('/');
+  await ready(page);
+  await openJob(page, /olive-market-sticker/);
+  const bound = await page.locator('.binding').textContent();
+  const j = (await (await page.request.get('/api/jobs')).json()).find((x: { sample: string }) => x.sample === 'market-stickers');
+  const rev = async () => (await (await page.request.get(`/api/jobs/${j.id}`)).json()).revision as number;
+  const before = await rev();
+  // Another tab changes the job; this tab approves the old proposal while the replacement is still being prepared.
+  await page.request.post('/api/test/slow-next-prepare', { headers: { 'x-rollcue': '1' } });
+  const other = page.request.post(`/api/jobs/${j.id}/decide`, { headers: { 'x-rollcue': '1' }, data: { revision: before, params: { offsetMm: 2.5 } } });
+  await expect.poll(rev, { intervals: [20] }).toBeGreaterThan(before);
+  await page.getByRole('button', { name: 'Approve and release' }).click();
+  await expect(page.locator('.toast')).toContainText('replaced');
+  await other;
+  await expect(page.locator('.eyebrow')).toHaveText('Prepared automatically · waiting for your approval', { timeout: 15_000 });
+  await expect(page.locator('.binding')).not.toHaveText(bound!);
+});
+
 test('no horizontal overflow at this viewport', async ({ page }) => {
   await page.goto('/');
   await ready(page);

@@ -10,7 +10,8 @@ function niceStep(span: number) {
   return 2000;
 }
 
-export function Mat({ job }: { job: JobView }) {
+/** `onPreview` reports whether the production render for a proposal actually loaded; approval waits for it (Codex R4-5). */
+export function Mat({ job, onPreview }: { job: JobView; onPreview?: (proposalId: string, ok: boolean) => void }) {
   const uid = useId().replace(/:/g, '');
   const [split, setSplit] = useState(0.5);
   const [showCut, setShowCut] = useState(true);
@@ -79,7 +80,8 @@ export function Mat({ job }: { job: JobView }) {
           {hasAfter && (
             <g clipPath={`url(#R${uid})`}>
               <rect x={0} y={0} width={page.w} height={page.h} className="media" />
-              <image href={p!.previewUrl} x={0} y={0} width={page.w} height={page.h} preserveAspectRatio="none" />
+              <image key={p!.id} href={p!.previewUrl} x={0} y={0} width={page.w} height={page.h} preserveAspectRatio="none"
+                onLoad={() => onPreview?.(p!.id, true)} onError={() => onPreview?.(p!.id, false)} />
               {showCut && cutPath && <path key={p!.id} d={cutPath} className="cut" pathLength={1} />}
             </g>
           )}

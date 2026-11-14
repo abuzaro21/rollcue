@@ -62,6 +62,10 @@ create table if not exists proposals (
   error text
 );
 create index if not exists proposals_job on proposals(job_id, created_at);
+-- The decision the operator sees, frozen with the proposal it produced (Codex R4-1).
+alter table proposals add column if not exists decision jsonb;
+-- At most one approvable proposal per job, on either database (Codex R4-2).
+create unique index if not exists proposals_one_open on proposals(job_id) where status in ('preparing','prepared','approved');
 create table if not exists corrections (
   id serial primary key,
   session_id text not null references sessions(id) on delete cascade,

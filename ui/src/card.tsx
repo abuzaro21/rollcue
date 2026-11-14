@@ -11,6 +11,8 @@ export type Act = {
   reject: () => void;
   next: (() => void) | null;
   busy: boolean;
+  /** Whether the production preview of the current proposal has loaded on screen. */
+  preview: 'ok' | 'loading' | 'error';
 };
 
 const pct = (v: number) => (v > 0 && v < 0.005 ? '<1%' : `${Math.round(v * 100)}%`);
@@ -210,7 +212,9 @@ function Decision({ job, act, notice }: { job: JobView; act: Act; notice: ReactN
 
       {!choose && p && !failed && (
         <div className="approve">
-          <button type="button" className="primary" disabled={act.busy || p.status !== 'prepared'} onClick={act.approve}>
+          {p.status === 'approved' && <p className="muted small" role="status">Approved, but the release was not recorded. Approve again to finish it.</p>}
+          {act.preview === 'error' && <p className="muted small" role="alert">The production preview did not load. Reload the page before approving.</p>}
+          <button type="button" className="primary" disabled={act.busy || act.preview !== 'ok' || !(p.status === 'prepared' || (p.status === 'approved' && !p.executing))} onClick={act.approve}>
             {d.kind === 'return' ? 'Approve return' : 'Approve and release'}
           </button>
           <button type="button" className="quiet" disabled={act.busy} onClick={act.reject}>Reject job</button>
@@ -288,10 +292,14 @@ function Receipt({ job, act }: { job: JobView; act: Act }) {
       <h2 className="headline">{returned ? 'Return notice approved' : 'In the production queue'}</h2>
       <dl className="ticket mono">
         {t.intentLabel && <><dt>job</dt><dd>{t.intentLabel}{t.quantity ? ` × ${Number(t.quantity).toLocaleString('en-US')}` : ''}</dd></>}
+        {t.media && <><dt>media</dt><dd>{MEDIA_LABEL[t.media as keyof typeof MEDIA_LABEL] ?? t.media}</dd></>}
+        {t.build && <><dt>build</dt><dd>{fmt(t.build.targetW)} × {fmt(t.build.targetH)} mm · cut {t.build.cut}</dd></>}
+        {t.layout && <><dt>layout</dt><dd>{t.layout.across} across · {(t.layout.lengthMm / 1000).toFixed(2)} m</dd></>}
         <dt>file</dt><dd>{short(p.artifact_sha256)}…</dd>
-        <dt>approved</dt><dd>{new Date(p.approved_at!).toLocaleTimeString()}</dd>
+        <dt>approved</dt><dd>{new Date(t.approval?.at ?? p.approved_at!).toLocaleTimeString()}</dd>
         <dt>checks</dt><dd>{(t.verification ?? []).filter((c: any) => c.pass).length}/{(t.verification ?? []).length} re-verified</dd>
         <dt>binding</dt><dd>{short(p.binding_hash)}…</dd>
+        {t.versions && <><dt>versions</dt><dd>{t.versions.policy} · {t.versions.model}</dd></>}
       </dl>
       <p className="muted small">{t.note}</p>
       <div className="approve">

@@ -36,7 +36,7 @@ There are four kinds of decision:
 
 ## 4. Receipt
 
-After approval: a **Released** (or **Returned**) stamp, the ticket (intent, quantity, media, build, layout, versions, approval time and binding hash), the verification count ("6/6 re-verified"), and the download link for the production PDF.
+After approval: a **Released** (or **Returned**) stamp, the ticket (intent, quantity, media, build, layout, versions, approval time and binding hash), the verification count (for example "11/11 re-verified"), and the download link for the production PDF.
 
 ## 5. When something fails
 

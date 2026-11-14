@@ -49,7 +49,7 @@ export const api = {
 
 /** A job is "working" while the server is still reading it or building its proposal. */
 export const isWorking = (j: JobView | null) =>
-  !!j && (j.status === 'analysing' || (j.status === 'ready' && (!j.plan || j.proposal?.status === 'preparing' || j.proposal?.status === 'approved' || ((j.plan.decision.kind === 'release' || j.plan.decision.kind === 'return') && !j.proposal))));
+  !!j && (j.status === 'analysing' || (j.status === 'ready' && (!j.plan || j.proposal?.status === 'preparing' || (j.proposal?.status === 'approved' && j.proposal.executing) || ((j.plan.decision.kind === 'release' || j.plan.decision.kind === 'return') && !j.proposal))));
 
 /** Counts the operator's physical work on a surface, for the side-by-side comparison. */
 export function interactionCounter() {

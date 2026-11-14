@@ -36,7 +36,7 @@ type JobRow = {
   features: number[] | null; preview: Uint8Array | null; prediction: Prediction | null; plan: Plan | null;
 };
 type ProposalRow = {
-  id: string; job_id: string; revision: number; created_at: Date; status: string; kind: string; intent: string | null; build: unknown; params: Params; params_hash: string;
+  id: string; job_id: string; revision: number; created_at: Date; status: string; kind: string; intent: string | null; build: unknown; decision: Plan['decision'] | null; params: Params; params_hash: string;
   policy_version: string; model_version: string; memory_version: string; artifact: Uint8Array | null; artifact_sha256: string | null; preview: Uint8Array | null;
   verification: { checks: Check[]; contour: PrepareResult['contour']; expect?: PrepareResult['expect'] } | null; overlay: PrepareResult['overlay']; binding_hash: string | null;
   approved_at: Date | null; approved_by: string | null; released_at: Date | null; ticket: Record<string, unknown> | null; error: string | null;
@@ -86,6 +86,8 @@ export type ServiceOpts = { db: Db; pool: Pool; model: ModelFile; samplesDir: st
 export class Service {
   db: Db; pool: Pool; model: ModelFile; samplesDir: string; now: () => Date;
   failNextRelease = false; // test hook: simulate an execution failure
+  slowNextPrepareMs = 0; // test hook: hold the next preparation open
+  #executing = new Set<string>(); // proposals whose release is running in this process
   #pending = new Set<Promise<unknown>>();
   #samples: Sample[] | null = null;
 
@@ -205,16 +207,16 @@ export class Service {
       const { memory } = await this.memory(job.session_id, q);
       const pred = predict(this.model, job.features, memory);
       const p = plan(job.inspection, job.intake, pred, job.params, roll);
-      const signature = (x: Plan | null) => canon([x?.intent, x?.decision.kind, (x?.decision as { build?: unknown })?.build, x?.checks.map((c) => [c.id, c.status])]);
+      // Everything the decision card shows (text, layout, notice, check details) counts; otherwise the operator could
+      // approve a view that no longer matches the bound proposal (Codex R4-1).
+      const signature = (x: Plan | null) => canon([x?.intent, x?.intentSource, x?.decision, x?.checks]);
       if (o.onlyIfChanged && job.plan && signature(job.plan) === signature(p) && job.prediction?.top === pred.top) {
         await q('update jobs set prediction = $2::jsonb, plan = $3::jsonb where id = $1', [jid, JSON.stringify(pred), JSON.stringify(p)]);
         return null;
       }
-      let revision = job.revision;
-      if (o.bump) {
-        revision++;
-        await this.#supersede(q, jid, o.reason);
-      }
+      const revision = job.revision + (o.bump ? 1 : 0);
+      // Always: an overlapping replan at the same revision must not leave two approvable proposals (Codex R4-2).
+      await this.#supersede(q, jid, o.reason);
       await q(`update jobs set prediction = $2::jsonb, plan = $3::jsonb, revision = $4, status = 'ready', error = null where id = $1`, [jid, JSON.stringify(pred), JSON.stringify(p), revision]);
       await this.#event(q, jid, 'inferred', {
         reason: o.reason, revision, model: pred.modelVersion, memory: pred.memoryVersion, top: pred.top, pTop: pred.pTop, band: pred.band, abstain: pred.abstain,
@@ -225,8 +227,8 @@ export class Service {
       const pid = id();
       const kind = p.decision.kind === 'release' ? 'production' : 'return-notice';
       const params = { intent: p.intent, ...job.params };
-      await q(`insert into proposals (id, job_id, revision, status, kind, intent, build, params, params_hash, policy_version, model_version, memory_version) values ($1,$2,$3,'preparing',$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11)`,
-        [pid, jid, revision, kind, p.intent, JSON.stringify(p.decision.kind === 'release' ? p.decision.build : null), JSON.stringify(params), sha(canon([params, p.decision.kind === 'release' ? p.decision.build : p.decision.notice])), POLICY_VERSION, this.model.version, pred.memoryVersion]);
+      await q(`insert into proposals (id, job_id, revision, status, kind, intent, build, decision, params, params_hash, policy_version, model_version, memory_version) values ($1,$2,$3,'preparing',$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9,$10,$11,$12)`,
+        [pid, jid, revision, kind, p.intent, JSON.stringify(p.decision.kind === 'release' ? p.decision.build : null), JSON.stringify(p.decision), JSON.stringify(params), sha(canon([params, p.decision])), POLICY_VERSION, this.model.version, pred.memoryVersion]);
       await this.#event(q, jid, 'proposal-preparing', { proposal: pid, kind, revision, initiatedBy: 'rollcue' });
       const task: PrepareTask = p.decision.kind === 'release'
         ? { type: 'prepare-release', kind: job.kind as never, bytes: new Uint8Array(job.source), inspection: job.inspection, preview: new Uint8Array(job.preview!), build: p.decision.build, title: `${job.filename} — ${INTENT_LABEL[p.intent!]}`, subject: `RollCue job ${jid}, source sha256 ${job.source_sha256}`, stamp: job.created_at.toISOString() }
@@ -238,6 +240,7 @@ export class Service {
 
   async #prepare(jid: string, pid: string, task: PrepareTask) {
     let res: PrepareResult | null = null, error: string | null = null;
+    if (this.slowNextPrepareMs) { const ms = this.slowNextPrepareMs; this.slowNextPrepareMs = 0; await new Promise((ok) => setTimeout(ok, ms)); }
     try { res = await this.pool.run<PrepareResult>(task); } catch (e) { error = (e as Error).message; }
     await this.db.tx(async (q) => {
       const [job] = await q<JobRow>('select id, source_sha256, revision, status from jobs where id = $1 for update', [jid]);
@@ -334,31 +337,35 @@ export class Service {
    * the stored bytes before anything is called released.
    */
   async approve(sid: string, jid: string, body: { proposalId: unknown; artifactSha256: unknown }) {
-    let refused: { proposal: string; error: HttpError } | null = null;
+    let refused: { proposal: string; error: HttpError } | null = null, claimed: string | null = null;
     const approved = await this.db.tx(async (q) => {
       const job = await this.#lockJob(q, sid, jid);
       const [p] = await q<ProposalRow>('select * from proposals where id = $1 and job_id = $2 for update', [body.proposalId, jid]);
       if (!p) throw new HttpError(404, 'not-found', 'No such proposal for this job.');
       // Idempotent: a repeat (double click, retry after a dropped response) never executes twice.
-      if (p.status === 'released' || p.status === 'approved') return null;
+      if (p.status === 'released' || (p.status === 'approved' && this.#executing.has(p.id))) return null;
       const refuse = (status: number, code: string, message: string) => { refused = { proposal: p.id, error: new HttpError(status, code, message) }; return null; };
+      if (job.status !== 'ready') return refuse(409, 'closed', `This job is already ${job.status}.`);
+      // Approved but its release never finished (the final write failed): approving again resumes it (Codex R4-3).
+      if (p.status === 'approved' && p.revision === job.revision) { this.#executing.add(claimed = p.id); return p; }
       if (p.status === 'superseded' || p.revision !== job.revision) return refuse(409, 'superseded', 'This proposal was replaced after the job changed. Review the current one.');
       if (p.status !== 'prepared') return refuse(409, 'not-ready', p.status === 'failed' ? 'This proposal failed verification and cannot be approved.' : 'This proposal is not ready yet.');
       if (body.artifactSha256 !== p.artifact_sha256) return refuse(409, 'artifact-mismatch', 'The approval does not match the prepared artifact.');
       if (p.policy_version !== POLICY_VERSION || p.model_version !== this.model.version) return refuse(409, 'policy-changed', 'Policy or model changed since this was prepared.');
       if (!p.artifact || sha(p.artifact) !== p.artifact_sha256 || bindingHash(job, p) !== p.binding_hash) return refuse(409, 'binding-mismatch', 'Stored artifact does not match its binding.');
       const by = 'operator:' + sha(sid).slice(0, 8);
-      await q(`update proposals set status = 'approved', approved_at = now(), approved_by = $2 where id = $1`, [p.id, by]);
+      const [row] = await q<ProposalRow>(`update proposals set status = 'approved', approved_at = now(), approved_by = $2 where id = $1 returning *`, [p.id, by]);
       await this.#event(q, jid, 'approved', { proposal: p.id, artifactSha256: p.artifact_sha256, bindingHash: p.binding_hash, by });
-      return p;
-    });
+      this.#executing.add(claimed = p.id);
+      return row;
+    }).catch((e) => { if (claimed) this.#executing.delete(claimed); throw e; });
     if (refused) {
       const r = refused as { proposal: string; error: HttpError };
       // Recorded in its own transaction so the refusal is part of the audit trail.
       await this.db.tx((q) => this.#event(q, jid, 'approval-refused', { proposal: r.proposal, code: r.error.code }));
       throw r.error;
     }
-    if (approved) await this.#execute(jid, approved);
+    if (approved) try { await this.#execute(jid, approved); } finally { this.#executing.delete(approved.id); }
     return this.view(sid, jid);
   }
 
@@ -376,10 +383,10 @@ export class Service {
       checks = v.checks;
       if (!checks.every((c) => c.pass)) error = 'Release verification failed.';
     } catch (e) { error = (e as Error).message; }
-    await this.db.tx(async (q) => {
+    const final = this.db.tx(async (q) => {
       const [job] = await q<JobRow>('select * from jobs where id = $1 for update', [jid]);
       const [cur] = await q<ProposalRow>('select status, revision from proposals where id = $1 for update', [p.id]);
-      if (!job || cur.status !== 'approved' || cur.revision !== job.revision) {
+      if (!job || job.status !== 'ready' || cur.status !== 'approved' || cur.revision !== job.revision) {
         await this.#event(q, jid, 'release-aborted', { proposal: p.id, reason: 'job changed during execution' });
         return;
       }
@@ -390,8 +397,8 @@ export class Service {
       }
       const ticket = {
         job: jid, file: job.filename, sourceSha256: job.source_sha256, intent: p.intent, intentLabel: p.intent ? INTENT_LABEL[p.intent as Intent] : null,
-        intentSource: job.plan?.intentSource, quantity: job.intake.qty, media: job.intake.media, build: p.build, layout: job.plan?.decision.kind === 'release' ? job.plan.decision.layout : null,
-        artifact: { kind: p.kind, sha256: p.artifact_sha256 }, approval: { at: new Date().toISOString(), by: p.approved_by, bindingHash: p.binding_hash },
+        intentSource: job.plan?.intentSource, quantity: job.intake.qty, media: job.intake.media, build: p.build, layout: p.decision?.kind === 'release' ? p.decision.layout : null,
+        artifact: { kind: p.kind, sha256: p.artifact_sha256 }, approval: { at: p.approved_at && new Date(p.approved_at).toISOString(), by: p.approved_by, bindingHash: p.binding_hash },
         versions: { policy: p.policy_version, model: p.model_version, memory: p.memory_version }, verification: checks.map((c) => ({ id: c.id, pass: c.pass, detail: c.detail })),
         note: 'Released to the production queue of this demo. RollCue does not print, cut or send anything.',
       };
@@ -399,6 +406,14 @@ export class Service {
       await q(`update jobs set status = $2 where id = $1`, [jid, p.kind === 'return-notice' ? 'returned' : 'released']);
       await this.#event(q, jid, 'released', { proposal: p.id, artifactSha256: p.artifact_sha256, ticketSha256: sha(canon(ticket)), verified: checks.length });
     });
+    try { await final; } catch (e) {
+      // The final write failed: record a retryable failure so the proposal is not stranded in 'approved' (Codex R4-3).
+      // If even that fails, it stays 'approved' and approving again resumes it.
+      await this.db.tx(async (q) => {
+        const done = await q(`update proposals set status = 'failed', error = $2 where id = $1 and status = 'approved' returning id`, [p.id, 'Release could not be recorded. Nothing was released.']);
+        if (done.length) await this.#event(q, jid, 'release-failed', { proposal: p.id, error: (e as Error).message, retry: 'Use Retry to prepare and verify again.' });
+      });
+    }
   }
 
   /** After a failed preparation or release: prepare again from the current state (new proposal, same revision rules). */
@@ -436,7 +451,7 @@ export class Service {
   async view(sid: string, jid: string) {
     const [job] = await this.db.q<JobRow>('select * from jobs where id = $1 and session_id = $2', [jid, sid]);
     if (!job) throw new HttpError(404, 'not-found', 'No such job in this session.');
-    const props = await this.db.q<ProposalRow>('select id, revision, created_at, status, kind, intent, build, params, artifact_sha256, verification, overlay, binding_hash, approved_at, approved_by, released_at, ticket, error, policy_version, model_version, memory_version from proposals where job_id = $1 order by created_at', [jid]);
+    const props = await this.db.q<ProposalRow>('select id, revision, created_at, status, kind, intent, build, decision, params, artifact_sha256, verification, overlay, binding_hash, approved_at, approved_by, released_at, ticket, error, policy_version, model_version, memory_version from proposals where job_id = $1 order by created_at', [jid]);
     const events = await this.db.q<{ seq: number; at: Date; type: string; data: unknown; prev_hash: string; hash: string }>('select * from events where job_id = $1 order by seq', [jid]);
     const current = props.filter((p) => p.revision === job.revision && p.status !== 'superseded').at(-1) ?? null;
     const i = job.inspection;
@@ -445,7 +460,7 @@ export class Service {
       intake: job.intake, params: job.params, sourceSha256: job.source_sha256, kind: job.kind,
       inspection: i && { ...i },
       prediction: job.prediction, plan: job.plan,
-      proposal: current && { ...current, previewUrl: `/api/jobs/${jid}/proposals/${current.id}/preview.png`, downloadUrl: `/api/jobs/${jid}/proposals/${current.id}/artifact.pdf` },
+      proposal: current && { ...current, executing: this.#executing.has(current.id), previewUrl: `/api/jobs/${jid}/proposals/${current.id}/preview.png`, downloadUrl: `/api/jobs/${jid}/proposals/${current.id}/artifact.pdf` },
       history: props.map((p) => ({ id: p.id, revision: p.revision, status: p.status, kind: p.kind, intent: p.intent, createdAt: p.created_at, artifactSha256: p.artifact_sha256 })),
       events: events.map((e) => ({ seq: e.seq, at: e.at, type: e.type, data: e.data, hash: e.hash.slice(0, 12) })),
       chainOk: verifyChain(jid, events),
@@ -488,6 +503,8 @@ export class Service {
   // ---------- audit ----------
 
   async #event(q: Q, jid: string, type: string, data: unknown) {
+    // Serialise sequence allocation per job on Postgres; re-locking a row this transaction already holds is free (Codex R4-4).
+    await q('select id from jobs where id = $1 for update', [jid]);
     const [last] = await q<{ seq: number; hash: string }>('select seq, hash from events where job_id = $1 order by seq desc limit 1', [jid]);
     const seq = (last?.seq ?? 0) + 1, prev = last?.hash ?? 'genesis';
     const at = this.now().toISOString();
