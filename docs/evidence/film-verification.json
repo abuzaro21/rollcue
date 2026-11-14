@@ -1,0 +1,55 @@
+{
+ "file": "film/out/rollcue-film.mp4",
+ "bytes": 10972121,
+ "duration_s": 89.6,
+ "video": {
+  "codec_name": "h264",
+  "profile": "High",
+  "width": 1920,
+  "height": 1080,
+  "r_frame_rate": "30/1",
+  "pix_fmt": "yuv420p",
+  "nb_read_frames": "2688",
+  "color_range": "tv"
+ },
+ "audio": {
+  "codec_name": "aac",
+  "sample_rate": "48000",
+  "channels": 2
+ },
+ "integrated_loudness_lufs": -16.5,
+ "captions": {
+  "cues": 36,
+  "first": [
+   0.42,
+   1.6360000000000001
+  ],
+  "last": [
+   83.542,
+   86.009
+  ]
+ },
+ "end_card": {
+  "magenta_pixels": 8841,
+  "paper_pixels": 35773
+ },
+ "first_frame_mean": 0.0,
+ "whisper_small_en": {
+  "word_error_rate": 0.0099,
+  "heard": "A new order lands. The file is called poster for jars. Before anyone asks, RoleQ reads it. The size, the quantity, the label stock, the customer's note. These are role labels, not a poster. And the work is already done. The production file is prepared, checked, and waiting for one decision. Not a form, not a dashboard. This sticker came in with no cut path, so RoleQ traced the contour itself. On one side, the customer's file. On the other, the prepared proof. Nothing reaches production until I approve, and my approval is bound to this exact file, released with every check verified again. The real output, a print ready PDF with the cut contour line the cutter needs. Sometimes it guesses wrong. Stickers final is really one window poster, and RoleQ flags the evidence as thin. One tap corrects it. The old proposal is void, and a poster is prepared instead. The next file like it arrives already read as a poster. From my correction, in this session only. The same sticker job the old way. Pick the product, run preflight, choose the cut, type the offset. Nine clicks and three fields against two clicks. RoleQ, the next decision, not another dashboard."
+ },
+ "checks": {
+  "duration_89_to_90_s": true,
+  "resolution_1920x1080": true,
+  "fps_30": true,
+  "h264_yuv420p": true,
+  "aac_audio": true,
+  "decodes_without_errors": true,
+  "srt_well_formed": true,
+  "loudness_near_-16_lufs": true,
+  "narration_matches_script_wer_under_10pct": true,
+  "logo_visible_on_end_card": true
+ },
+ "all_passed": true,
+ "not_checked": "No person has watched or listened to this file as part of these checks."
+}

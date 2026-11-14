@@ -2,6 +2,8 @@
 
 **The next decision, not another dashboard.**
 
+![RollCue: a customer file already read, inferred as die-cut stickers, with a traced cut contour prepared and waiting for one approval](docs/screenshots/01-first-visit.png)
+
 RollCue is print intake for a small roll-fed print shop. A customer's file arrives. RollCue reads it: page geometry, transparency, spot colours, effective resolution, the order details and the customer's notes. It works out what job this is (die-cut stickers, roll labels, a poster or a banner) and runs the preflight a prepress operator would run. Then it **prepares the fix**: a traced cut contour, a resized page, a corrected cut path, or a return notice to the customer. The operator sees one card: what RollCue found, the file it prepared, and one button.
 
 Nothing happens until the operator approves. The approval is bound to the exact bytes they reviewed. If RollCue guessed the job wrong, "Not this?" fixes it in one step, the work is re-prepared, and the correction is remembered for similar files in that session.
@@ -9,7 +11,7 @@ Nothing happens until the operator approves. The approval is bound to the exact 
 Built for the DOO Builders League challenge "Beyond the Chatbot".
 
 - **Live demo:** <https://rollcue-a7jn.onrender.com> (free hosting: the first visit after an idle spell can take up to a minute to wake; verification in [docs/DEPLOY.md](docs/DEPLOY.md))
-- **Film (90 s):** _pending, see [docs/SUBMISSION.md](docs/SUBMISSION.md)_
+- **Film (90 s):** [rollcue-film.mp4](https://github.com/abuzaro21/rollcue/releases/download/v1.0.0/rollcue-film.mp4) with [English captions](https://github.com/abuzaro21/rollcue/releases/download/v1.0.0/rollcue-film.srt), attached to [release v1.0.0](https://github.com/abuzaro21/rollcue/releases/tag/v1.0.0). Every product shot is a recording of the real app; how it was made and checked: [docs/FILM.md](docs/FILM.md)
 - **Thesis (≤300 words):** [docs/THESIS.md](docs/THESIS.md)
 
 ## Try it in 30 seconds
@@ -19,6 +21,23 @@ Open the demo. Four sample jobs are already waiting, already read and prepared. 
 Then open **stickers-final.pdf**. The filename says stickers; the customer meant one A4 window poster. RollCue reads it as stickers but flags the evidence as thin. Click **Not this?**, choose **Poster**, and watch it re-prepare. **Try a sample job** adds more jobs, including a similar file that RollCue now reads correctly because of your correction.
 
 **Compare: the old way** opens a representative legacy preflight workstation running the same job on the same backend.
+
+## Screenshots
+
+All taken from the running app by [`film/capture.ts`](film/capture.ts), on synthetic sample files.
+
+| | |
+|---|---|
+| ![A file named poster-for-jars arrives and is read as roll labels, already prepared](docs/screenshots/02-proactive.png) | ![The compare slider: the customer's file on the left, the prepared production file with its CutContour on the right](docs/screenshots/03-before-after.png) |
+| **A new file, prepared before anyone asks.** Named poster, read as roll labels from its size, quantity, stock and notes. | **Customer file and prepared proof**, side by side on one mat. |
+| ![The released receipt: approval bound to the file hash, every check re-verified](docs/screenshots/04-approved.png) | ![Not this? open on stickers-final.pdf, which RollCue flagged as thin evidence](docs/screenshots/05-wrong-guess.png) |
+| **Approval bound to the exact file**, then released with every check re-verified. | **A wrong guess, flagged.** Thin evidence; one tap to correct. |
+| ![After the correction: Poster, set by you, re-prepared](docs/screenshots/06-corrected.png) | ![The downloaded production PDF, read back: hash, page, CutContour spot colour, closed stroked cut](docs/screenshots/08-verified-pdf.png) |
+| **Corrected and re-prepared.** The old proposal is superseded. | **The real output**, read back from the downloaded bytes. |
+
+![The same sticker job on the legacy preflight (left) and RollCue (right)](docs/screenshots/07-legacy-vs-rollcue.png)
+
+On a phone: [decision](docs/screenshots/mobile-01-decision.png) · [approve](docs/screenshots/mobile-02-approve.png).
 
 ## What makes it not a chatbot and not a dashboard
 
@@ -70,7 +89,7 @@ Environment: `PORT`, `DATABASE_URL` (Postgres; otherwise PGlite in `RC_DATA_DIR`
 
 ## Documents
 
-[Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/ARCHITECTURE-DECISIONS.md) · [Product thesis](docs/PRODUCT-THESIS.md) · [Workflow](docs/WORKFLOW.md) · [Intent inference](docs/INTENT-INFERENCE.md) · [Evaluation](docs/INFERENCE-EVALUATION.md) · [Action safety](docs/ACTION-SAFETY.md) · [Wrong-guess recovery](docs/WRONG-GUESS-RECOVERY.md) · [Legacy comparison](docs/LEGACY-COMPARISON.md) · [Failure test](docs/FAILURE-TEST.md) · [Security](docs/SECURITY.md) · [Deploy](docs/DEPLOY.md) · [AI disclosure](docs/AI-DISCLOSURE.md) · [Submission](docs/SUBMISSION.md) · [Execution state](docs/EXECUTION_STATE.md)
+[Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/ARCHITECTURE-DECISIONS.md) · [Product thesis](docs/PRODUCT-THESIS.md) · [Workflow](docs/WORKFLOW.md) · [Intent inference](docs/INTENT-INFERENCE.md) · [Evaluation](docs/INFERENCE-EVALUATION.md) · [Action safety](docs/ACTION-SAFETY.md) · [Wrong-guess recovery](docs/WRONG-GUESS-RECOVERY.md) · [Legacy comparison](docs/LEGACY-COMPARISON.md) · [Failure test](docs/FAILURE-TEST.md) · [Security](docs/SECURITY.md) · [Deploy](docs/DEPLOY.md) · [AI disclosure](docs/AI-DISCLOSURE.md) · [Film](docs/FILM.md) · [Submission](docs/SUBMISSION.md) · [Execution state](docs/EXECUTION_STATE.md)
 
 ## Limits, stated plainly
 
