@@ -1,12 +1,12 @@
-RollCue clean-clone CI — commit 0cbfe48efb76b03e8e726be1570374f28942372a — 2026-11-14T16:26:53Z
+RollCue clean-clone CI — commit 638f83b61cffb39b07bbb63521b346f16ca0310c — 2026-11-14T19:11:46Z
 working tree clean
 debconf: delaying package configuration, since apt-utils is not installed
 
-=== node v24.13.0, gs 10.00.0 (16:30:00)
+=== node v24.13.0, gs 10.00.0 (19:14:28)
 
-=== install (16:30:00)
+=== install (19:14:28)
 
-added 55 packages, and audited 56 packages in 5s
+added 55 packages, and audited 56 packages in 6s
 
 13 packages are looking for funding
   run `npm fund` for details
@@ -144,7 +144,7 @@ Get:64 http://deb.debian.org/debian bookworm/main amd64 xfonts-scalable all 1:1.
 Get:65 http://deb.debian.org/debian-security bookworm-security/main amd64 xserver-common all 2:21.1.7-3+deb12u13 [2384 kB]
 Get:66 http://deb.debian.org/debian-security bookworm-security/main amd64 xvfb amd64 2:21.1.7-3+deb12u13 [3154 kB]
 debconf: delaying package configuration, since apt-utils is not installed
-Fetched 80.0 MB in 1min 32s (865 kB/s)
+Fetched 80.0 MB in 1min 39s (810 kB/s)
 Selecting previously unselected package fonts-ipafont-gothic.
 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 24689 files and directories currently installed.)
 Preparing to unpack .../00-fonts-ipafont-gothic_00303-23_all.deb ...
@@ -449,13 +449,13 @@ Downloading Chrome Headless Shell 156.0.8078.4 (playwright chromium-headless-she
 |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 120 MiB
 Chrome Headless Shell 156.0.8078.4 (playwright chromium-headless-shell v1248) downloaded to /root/.cache/ms-playwright/chromium_headless_shell-1248
 
-=== typecheck (16:38:01)
+=== typecheck (19:20:37)
 
 > rollcue@0.1.0 typecheck
 > tsc -p tsconfig.json --noEmit
 
 
-=== build (16:38:04)
+=== build (19:20:40)
 
 > rollcue@0.1.0 build
 > vite build
@@ -489,124 +489,135 @@ public/assets/legacy-CgBJMlBe.js                                        9.60 kB 
 public/assets/index-D5Ugzn_C.js                                        30.88 kB │ gzip:  9.17 kB
 public/assets/fonts-DSY_f_PS.js                                       223.43 kB │ gzip: 70.16 kB
 
-✓ built in 182ms
+✓ built in 178ms
 
-=== unit + integration (16:38:05)
+=== unit + integration (19:20:40)
 
 > rollcue@0.1.0 test
 > node --disable-warning=ExperimentalWarning --test --test-concurrency=1 "test/**/*.test.ts"
 
-✔ R4-1 a roll change that alters the layout invalidates the approval and the ticket shows the bound layout (3331.327675ms)
-✔ R4-1 a roll change that alters a return notice invalidates the approval (1637.978504ms)
-✔ R4-2 overlapping edits leave one approvable proposal and one terminal outcome (628.255729ms)
-✔ R4-2 approval is refused once the job is closed (546.859817ms)
-✔ R4-3 a failed final write leaves a retryable failure, not a stranded approval (742.70321ms)
+✔ R4-1 a roll change that alters the layout invalidates the approval and the ticket shows the bound layout (3110.170793ms)
+✔ R4-1 a roll change that alters a return notice invalidates the approval (1513.370768ms)
+✔ R4-2 overlapping edits leave one approvable proposal and one terminal outcome (652.247614ms)
+✔ R4-2 approval is refused once the job is closed (495.042786ms)
+✔ R4-3 a failed final write leaves a retryable failure, not a stranded approval (636.057753ms)
 [rollcue] request failed Error: injected: database unavailable
     at svc.db.tx (file:///work/test/api-r4.test.ts:39:60)
-    at #execute (file:///work/src/service.ts:498:21)
-    at async Service.approve (file:///work/src/service.ts:454:25)
-    at async handle (file:///work/src/http.ts:156:60)
-✔ R4-3 if even the failure cannot be recorded, approving again resumes the release (707.011901ms)
+    at #execute (file:///work/src/service.ts:505:21)
+    at async Service.approve (file:///work/src/service.ts:461:25)
+    at async handle (file:///work/src/http.ts:186:60)
+✔ R4-3 if even the failure cannot be recorded, approving again resumes the release (538.618191ms)
 [rollcue] request failed Error: injected: read failed
     at svc.view (file:///work/test/api-r4.test.ts:143:77)
-    at Service.approve (file:///work/src/service.ts:455:17)
-    at async handle (file:///work/src/http.ts:156:60)
-✔ R4-6 an error after the release committed does not claim nothing was released (628.657002ms)
-✔ R4-7 the ticket records the committed approval, not the execution moment (583.596411ms)
-✔ R5-1 approval is refused while memory says something else than the prepared proposal (3443.104932ms)
-✔ R5-1 correcting one job leaves no old proposal approvable on its twin (1013.157183ms)
-✔ R5-2 a memory-driven type change drops options chosen for the old type (1083.838687ms)
-✔ R5-2 an explicit type change drops a size chosen for the old type (1181.142489ms)
-✔ R5-3 correcting a correction leaves one lesson, and the next similar job follows the latest (2403.750645ms)
-✔ R5-4 a correction does not silently re-type a different job (Codex cases label-1949 → sticker-2512) (909.061397ms)
-✔ R5-4 / R5-8 policy: a near-duplicate correction applies; a distinct one asks; abstention offers every type (1576.783217ms)
-✔ R5-5 a chosen size and a soft-print override can both be taken back from the decision (1196.147527ms)
-✔ R5-6 a wrong traced contour can be replaced by a rectangle without changing the job type (657.598066ms)
-✔ R6-1 only the header-protected start-up call creates a session (5463.680852ms)
-✔ R6-1 new sessions are rate-limited per address outside test mode (2060.736111ms)
-✔ R6-2 new work is refused while the worker backlog is full (891.568041ms)
-✔ R6-3 retry needs a failure, superseded proposals drop their bytes, metrics are capped (1170.254913ms)
-✔ R6-3 a job cannot be changed without limit (665.771901ms)
-✔ R6-6 test hooks refuse to start in production (0.663891ms)
-✔ R6-8 retention is absolute: activity does not keep a session alive (583.815891ms)
-✔ R6-4 a compressed stream that inflates past the budget is refused before parsing (411.017683ms)
-✔ R6-4 filters that cannot be bounded are refused (2.385402ms)
-✔ R6-5 an image cannot declare a negative or non-integer size (4.880053ms)
-✔ R6-5 inline images count against the image budget (3.20614ms)
-✔ R6-7 a task queued behind a timed-out one gets a fresh worker (189.003728ms)
-✔ R6-2 a queued task reads its file only when the worker is free (179.574642ms)
-✔ R7-2 concurrent requests cannot overshoot the worker capacity (3124.460298ms)
+    at Service.approve (file:///work/src/service.ts:462:17)
+    at async handle (file:///work/src/http.ts:186:60)
+✔ R4-6 an error after the release committed does not claim nothing was released (503.04177ms)
+✔ R4-7 the ticket records the committed approval, not the execution moment (530.175227ms)
+✔ R5-1 approval is refused while memory says something else than the prepared proposal (2849.883736ms)
+✔ R5-1 correcting one job leaves no old proposal approvable on its twin (887.583584ms)
+✔ R5-2 a memory-driven type change drops options chosen for the old type (1035.731567ms)
+✔ R5-2 an explicit type change drops a size chosen for the old type (701.498403ms)
+✔ R5-3 correcting a correction leaves one lesson, and the next similar job follows the latest (1219.661281ms)
+✔ R5-4 a correction does not silently re-type a different job (Codex cases label-1949 → sticker-2512) (766.55567ms)
+✔ R5-4 / R5-8 policy: a near-duplicate correction applies; a distinct one asks; abstention offers every type (537.210653ms)
+✔ R5-5 a chosen size and a soft-print override can both be taken back from the decision (1158.730116ms)
+✔ R5-6 a wrong traced contour can be replaced by a rectangle without changing the job type (686.673151ms)
+✔ R6-1 only the header-protected start-up call creates a session (2603.196294ms)
+✔ R6-1 new sessions are rate-limited per address outside test mode (1181.648423ms)
+✔ R6-2 new work is refused while the worker backlog is full (707.900542ms)
+✔ R6-3 retry needs a failure, superseded proposals drop their bytes, metrics are capped (869.731026ms)
+✔ R6-3 a job cannot be changed without limit (704.798917ms)
+✔ R6-6 test hooks refuse to start in production (1.220078ms)
+✔ R6-8 retention is absolute: activity does not keep a session alive (645.192584ms)
+✔ R6-4 a compressed stream that inflates past the budget is refused before parsing (368.857174ms)
+✔ R6-4 filters that cannot be bounded are refused (2.427008ms)
+✔ R6-5 an image cannot declare a negative or non-integer size (4.088987ms)
+✔ R6-5 inline images count against the image budget (2.299002ms)
+✔ R6-7 a task queued behind a timed-out one gets a fresh worker (209.294009ms)
+✔ R6-2 a queued task reads its file only when the worker is free (208.182212ms)
+✔ R7-2 concurrent requests cannot overshoot the worker capacity (3195.871448ms)
 [rollcue] request failed Error: injected: database unavailable
-    at s.db.tx (file:///work/test/api-r7.test.ts:40:58)
-    at #execute (file:///work/src/service.ts:498:21)
-    at async Service.approve (file:///work/src/service.ts:454:25)
-    at async handle (file:///work/src/http.ts:156:60)
-✔ R7-4 resuming a stranded approval re-checks the current roll (753.55477ms)
-✔ R7-5 session-wide changes count against the change limit (1214.800005ms)
-✔ R7-6 an impossible size can be undone from the return card (1010.717506ms)
-✔ R7-1 a Flate stream with a small window is still counted (787.095769ms)
-✔ R7-3 a DeviceN stroke with zero CutContour tint is not a cut path (10.836192ms)
-✔ R7-7 image objects and inline images share one pixel budget (2.391068ms)
-✔ R7b-1 a literal endstream inside compressed data does not hide its expansion (746.787191ms)
-✔ R7b-2 a client that leaves before its upload is read gives its slot back (1056.033936ms)
-✔ R7b-3 malformed colour operands never paint a cut (3.82588ms)
-✔ first visit seeds jobs that RollCue has already prepared (3478.595199ms)
-✔ mutations need the custom header (13.339436ms)
-✔ approval is bound to the exact artifact and is idempotent (75.789542ms)
-✔ wrong guess: correction supersedes the old proposal, is remembered, and carries to a similar job only (399.035221ms)
-✔ sessions are isolated (44.028352ms)
-✔ an execution failure is reported, nothing is released, and retry recovers (737.91673ms)
-✔ return path: soft poster gets a verified notice, approval returns the job (102.790284ms)
-✔ bad input is refused before any parsing work (33.323919ms)
-✔ duplicate submission: the same file twice is two jobs; double-clicked approval releases once (222.848099ms)
-✔ approval after the job changed is refused (intake edited under a prepared proposal) (220.727032ms)
-✔ "Use RollCue's reading again" withdraws the correction, so memory no longer answers for the job (Codex R1-5) (864.456357ms)
-✔ a proposal prepared under an older policy or model version cannot be approved; a tampered artifact neither (112.50691ms)
-✔ a broken PDF fails cleanly inside the worker (11.220976ms)
-✔ restart preserves pending approvals and resumes interrupted work (4726.969365ms)
-✔ R3-1: a custom UserUnit is refused instead of measured wrongly (8.698425ms)
-✔ R3-2: effective resolution uses the weaker axis and the real fit (179.758589ms)
-✔ R3-3: a raster stencil (/ImageMask) is measured, not passed as vector art (24.977889ms)
-✔ R3-4: a cut is what the page actually strokes, not a declared colour space (222.541313ms)
-✔ R3-5: fill-and-crop traces only the printed art, and the cut stays on the page (523.445717ms)
-✔ R3-6: a rounded rectangular cut never leaves the trim (0.759752ms)
-✔ R3-7: bleed is measured at the finished size, kept through a fill, and declared honestly (384.708822ms)
-✔ R3-8: printable annotations are returned, not silently dropped (162.599012ms)
-✔ R3-9: roll fit uses the printed footprint, including crop marks (193.388418ms)
-✔ R3-10: verification checks what the page paints, not what the builder meant (52.125106ms)
-✔ R3-11: EXIF orientation is refused and EXIF density is read (30.391874ms)
-✔ R3-12: a multi-page PDF is returned until a page is chosen (48.002263ms)
-✔ R3-13: an over-budget PDF image is refused before it is decoded (3.204416ms)
-✔ R3-14: the 5 m cap covers every page box, and the printed size of a density-tagged raster (6.176688ms)
-✔ wrong intent with high confidence is flagged as thin evidence, not silently trusted (337.729069ms)
-✔ inference abstains when critical evidence is missing (252.189505ms)
-✔ contradictory metadata: the whole job outweighs one wrong word (116.125203ms)
-✔ misleading filename does not decide the job (196.682292ms)
-✔ unsupported and malformed files are refused before analysis (2.179449ms)
-✔ unexpected page dimensions: oversize pages refused, rotated pages returned (220.43489ms)
-✔ missing bleed is a warning, and RollCue never invents bleed (193.294333ms)
-✔ wrong cut paths are returned: misnamed, filled, or on a job that is not cut (382.837025ms)
-✔ output validity: contour PDF keeps vectors, has a stroked CutContour separation, trim box and verifies (1655.014153ms)
-✔ session memory: a correction fixes near-duplicates and leaves unrelated jobs alone (233.559895ms)
-✔ unsupported work (packaging, dielines) is stopped by policy, not read as the nearest intent (Codex R1-6) (108.196685ms)
-✔ packaging labels are labels, not out-of-scope packaging (Codex R2-3) (69.743209ms)
-✔ courtesy text is not evidence; a height-only size is (Codex R2-4) (153.990206ms)
-✔ a correction that overrides the model on another job is flagged for checking (Codex R2-2) (99.400554ms)
-✔ correcting a banner does not turn a different-shaped poster into a banner (Codex R2-2 pair) (459.7843ms)
-✔ explanations say which way a value points (Codex R2-7) (184.464655ms)
-✔ the documented dataset command reproduces the committed dataset size (Codex R2-8) (136.928321ms)
-✔ an unresolved check is never reported as "every check passes" (Codex R1-11) (81.695019ms)
-✔ no hardware, network or process control anywhere in the shipped service (1.969793ms)
-ℹ tests 87
+    at s.db.tx (file:///work/test/api-r7.test.ts:41:58)
+    at #execute (file:///work/src/service.ts:505:21)
+    at async Service.approve (file:///work/src/service.ts:461:25)
+    at async handle (file:///work/src/http.ts:186:60)
+✔ R7-4 resuming a stranded approval re-checks the current roll (653.45017ms)
+✔ R7-5 session-wide changes count against the change limit (918.205667ms)
+✔ R7-6 an impossible size can be undone from the return card (715.756523ms)
+✔ R7-1 a Flate stream with a small window is still counted (514.790798ms)
+✔ R7-3 a DeviceN stroke with zero CutContour tint is not a cut path (6.577405ms)
+✔ R7-7 image objects and inline images share one pixel budget (1.29481ms)
+✔ R7b-1 a literal endstream inside compressed data does not hide its expansion (597.367935ms)
+✔ R7b-2 a client that leaves before its upload is read gives its slot back (961.951615ms)
+✔ R7b-3 malformed colour operands never paint a cut (8.65803ms)
+✔ R8-1 a second compression layer is refused before any parser decodes it (190.399227ms)
+✔ R8-2 malformed colour or path operands are refused, well-formed ones still read (4.620599ms)
+✔ R8-4 filling the limiter with other keys does not reset a drained bucket (5.706631ms)
+✔ R8-5 every spelling of one address gives one key; garbage shares one key (0.474365ms)
+✔ R8-6 concurrent new sessions cannot pass the global ceiling (402.372045ms)
+✔ first visit seeds jobs that RollCue has already prepared (2516.715272ms)
+✔ mutations need the custom header (16.116917ms)
+✔ approval is bound to the exact artifact and is idempotent (72.621368ms)
+✔ wrong guess: correction supersedes the old proposal, is remembered, and carries to a similar job only (449.530928ms)
+✔ sessions are isolated (36.180526ms)
+✔ an execution failure is reported, nothing is released, and retry recovers (716.303288ms)
+✔ return path: soft poster gets a verified notice, approval returns the job (102.318105ms)
+✔ bad input is refused before any parsing work (42.477359ms)
+✔ duplicate submission: the same file twice is two jobs; double-clicked approval releases once (240.409414ms)
+✔ approval after the job changed is refused (intake edited under a prepared proposal) (197.365394ms)
+✔ "Use RollCue's reading again" withdraws the correction, so memory no longer answers for the job (Codex R1-5) (880.683183ms)
+✔ a proposal prepared under an older policy or model version cannot be approved; a tampered artifact neither (108.435156ms)
+✔ a broken PDF fails cleanly inside the worker (13.875856ms)
+✔ restart preserves pending approvals and resumes interrupted work (4069.21219ms)
+✔ cold start, 200 concurrent new-session requests from one client: exactly 10 sessions exist afterwards (5354.280062ms)
+✔ a client-supplied X-Forwarded-For prefix does not change the key (1664.420138ms)
+✔ distinct clients each get their own budget (1858.717016ms)
+✔ an IPv6 client cannot rotate addresses inside its /64 to multiply the budget (2571.193456ms)
+✔ clientIp: Render chain, short chain, IPv6 /64 and IPv4-mapped forms (0.860415ms)
+✔ token bucket: burst, refill rate and no reset while drained (0.237071ms)
+✔ R3-1: a custom UserUnit is refused instead of measured wrongly (27.381368ms)
+✔ R3-2: effective resolution uses the weaker axis and the real fit (421.633666ms)
+✔ R3-3: a raster stencil (/ImageMask) is measured, not passed as vector art (74.029953ms)
+✔ R3-4: a cut is what the page actually strokes, not a declared colour space (112.874774ms)
+✔ R3-5: fill-and-crop traces only the printed art, and the cut stays on the page (636.239527ms)
+✔ R3-6: a rounded rectangular cut never leaves the trim (0.738238ms)
+✔ R3-7: bleed is measured at the finished size, kept through a fill, and declared honestly (395.915363ms)
+✔ R3-8: printable annotations are returned, not silently dropped (169.669587ms)
+✔ R3-9: roll fit uses the printed footprint, including crop marks (200.887271ms)
+✔ R3-10: verification checks what the page paints, not what the builder meant (72.375372ms)
+✔ R3-11: EXIF orientation is refused and EXIF density is read (31.81302ms)
+✔ R3-12: a multi-page PDF is returned until a page is chosen (81.048635ms)
+✔ R3-13: an over-budget PDF image is refused before it is decoded (2.888456ms)
+✔ R3-14: the 5 m cap covers every page box, and the printed size of a density-tagged raster (5.802407ms)
+✔ wrong intent with high confidence is flagged as thin evidence, not silently trusted (290.143961ms)
+✔ inference abstains when critical evidence is missing (222.62637ms)
+✔ contradictory metadata: the whole job outweighs one wrong word (126.915413ms)
+✔ misleading filename does not decide the job (70.507394ms)
+✔ unsupported and malformed files are refused before analysis (2.310559ms)
+✔ unexpected page dimensions: oversize pages refused, rotated pages returned (174.029922ms)
+✔ missing bleed is a warning, and RollCue never invents bleed (193.458523ms)
+✔ wrong cut paths are returned: misnamed, filled, or on a job that is not cut (373.358283ms)
+✔ output validity: contour PDF keeps vectors, has a stroked CutContour separation, trim box and verifies (626.426332ms)
+✔ session memory: a correction fixes near-duplicates and leaves unrelated jobs alone (228.240944ms)
+✔ unsupported work (packaging, dielines) is stopped by policy, not read as the nearest intent (Codex R1-6) (143.784609ms)
+✔ packaging labels are labels, not out-of-scope packaging (Codex R2-3) (55.961863ms)
+✔ courtesy text is not evidence; a height-only size is (Codex R2-4) (148.221958ms)
+✔ a correction that overrides the model on another job is flagged for checking (Codex R2-2) (54.440993ms)
+✔ correcting a banner does not turn a different-shaped poster into a banner (Codex R2-2 pair) (384.306669ms)
+✔ explanations say which way a value points (Codex R2-7) (166.876996ms)
+✔ the documented dataset command reproduces the committed dataset size (Codex R2-8) (6.170304ms)
+✔ an unresolved check is never reported as "every check passes" (Codex R1-11) (75.171681ms)
+✔ no hardware, network or process control anywhere in the shipped service (5.277344ms)
+ℹ tests 98
 ℹ suites 0
-ℹ pass 87
+ℹ pass 98
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 66069.141144
+ℹ duration_ms 64304.610945
 
-=== inference eval (must reproduce committed results) (16:39:11)
+=== inference eval (must reproduce committed results) (19:21:45)
 
 > rollcue@0.1.0 eval
 > node --disable-warning=ExperimentalWarning scripts/eval.ts
@@ -625,7 +636,7 @@ handset n=32 top1=0.844 top2=1 ECE=0.081 abstain=0.125 acceptedAcc=0.929 wrongCo
   miss {"id":"record-label-party","truth":"poster","top":"label","pTop":0.7603,"band":"likely","abstain":false,"thin":false,"uncertain":false,"ok":false}
   uncertain [{"id":"stickers-final-window","abstained":false,"flaggedThin":true},{"id":"no-info-circle","abstained":false,"flaggedThin":true}]
 
-=== samples (must be byte-identical) (16:39:33)
+=== samples (must be byte-identical) (19:22:07)
 
 > rollcue@0.1.0 samples
 > node --disable-warning=ExperimentalWarning scripts/make-samples.ts
@@ -638,7 +649,7 @@ ok   shop-banner          banner@1.00 confident → release: Artwork is not at f
 ok   jam-labels-misnamed  label@1.00 confident → release: Rectangular cut needed [cut rect] 
 ok   misnamed-cut         sticker@1.00 confident → return: No usable cut path 
 
-=== artifact validation (16:39:34)
+=== artifact validation (19:22:08)
 ok   market-stickers      release  cut=contour  plates=Black|CutContour|Cyan|Magenta|Yellow
 ok   stickers-final       release  cut=contour  plates=Black|CutContour|Cyan|Magenta|Yellow
 ok   honey-labels         release  cut=keep     plates=Black|CutContour|Cyan|Magenta|Yellow
@@ -648,182 +659,187 @@ ok   jam-labels-misnamed  release  cut=rect     plates=Black|CutContour|Cyan|Mag
 ok   misnamed-cut         return   cut=none     plates=Black|Cyan|Magenta|Yellow
 7/7 samples valid
 
-=== browser tests (16:39:40)
+=== browser tests (19:22:16)
 
 Running 40 tests using 1 worker
 
-  ✓   1 [desktop] › e2e/compare.spec.ts:78:1 › clean sticker job: RollCue vs legacy (6.7s)
-  ✓   2 [desktop] › e2e/compare.spec.ts:87:1 › wrong-guess job: RollCue correction vs legacy manual entry (6.5s)
-  ✓   3 [desktop] › e2e/rollcue.spec.ts:12:1 › first visit: a prepared job and its next decision, no setup (1.4s)
+  ✓   1 [desktop] › e2e/compare.spec.ts:78:1 › clean sticker job: RollCue vs legacy (7.4s)
+  ✓   2 [desktop] › e2e/compare.spec.ts:87:1 › wrong-guess job: RollCue correction vs legacy manual entry (7.6s)
+  ✓   3 [desktop] › e2e/rollcue.spec.ts:12:1 › first visit: a prepared job and its next decision, no setup (1.3s)
   ✓   4 [desktop] › e2e/rollcue.spec.ts:27:1 › switching jobs never leaves the previous job actionable (1.3s)
-  ✓   5 [desktop] › e2e/rollcue.spec.ts:42:1 › server unreachable: says so, changes nothing, and retries (1.1s)
-  ✓   6 [desktop] › e2e/rollcue.spec.ts:51:1 › approve: bound to the artifact, then a verified receipt and a valid PDF (1.4s)
-  ✓   7 [desktop] › e2e/rollcue.spec.ts:68:1 › wrong guess: flagged, corrected in one step, remembered, re-prepared (3.5s)
-  ✓   8 [desktop] › e2e/rollcue.spec.ts:95:1 › return path: soft artwork gets a prepared notice instead of a blurry print (1.3s)
-  ✓   9 [desktop] › e2e/rollcue.spec.ts:105:1 › execution failure: nothing released, retry recovers (1.3s)
-  ✓  10 [desktop] › e2e/rollcue.spec.ts:120:1 › upload: a real file through intake, reading and decision (2.2s)
-  ✓  11 [desktop] › e2e/rollcue.spec.ts:134:1 › unsupported upload is refused with a clear message (1.3s)
-  ✓  12 [desktop] › e2e/rollcue.spec.ts:143:1 › keyboard: compare slider and dialog work without a pointer (1.2s)
-  ✓  13 [desktop] › e2e/rollcue.spec.ts:158:1 › refresh keeps the work: state is on the server, not in the tab (2.3s)
-  ✓  14 [desktop] › e2e/rollcue.spec.ts:172:1 › legacy will not output until ticket, preflight and cut are done (1.1s)
-  ✓  15 [desktop] › e2e/rollcue.spec.ts:180:1 › a suggested size is a choice, not a setting already applied (Codex R1-4) (2.6s)
-  ✓  16 [desktop] › e2e/rollcue.spec.ts:201:1 › approval waits until the production preview has loaded (Codex R4-5) (1.5s)
+  ✓   5 [desktop] › e2e/rollcue.spec.ts:42:1 › server unreachable: says so, changes nothing, and retries (1.2s)
+  ✓   6 [desktop] › e2e/rollcue.spec.ts:51:1 › approve: bound to the artifact, then a verified receipt and a valid PDF (3.3s)
+  ✓   7 [desktop] › e2e/rollcue.spec.ts:68:1 › wrong guess: flagged, corrected in one step, remembered, re-prepared (4.1s)
+  ✓   8 [desktop] › e2e/rollcue.spec.ts:95:1 › return path: soft artwork gets a prepared notice instead of a blurry print (1.6s)
+  ✓   9 [desktop] › e2e/rollcue.spec.ts:105:1 › execution failure: nothing released, retry recovers (1.6s)
+  ✓  10 [desktop] › e2e/rollcue.spec.ts:120:1 › upload: a real file through intake, reading and decision (2.3s)
+  ✓  11 [desktop] › e2e/rollcue.spec.ts:134:1 › unsupported upload is refused with a clear message (1.6s)
+  ✓  12 [desktop] › e2e/rollcue.spec.ts:143:1 › keyboard: compare slider and dialog work without a pointer (1.5s)
+  ✓  13 [desktop] › e2e/rollcue.spec.ts:158:1 › refresh keeps the work: state is on the server, not in the tab (2.7s)
+  ✓  14 [desktop] › e2e/rollcue.spec.ts:172:1 › legacy will not output until ticket, preflight and cut are done (1.2s)
+  ✓  15 [desktop] › e2e/rollcue.spec.ts:180:1 › a suggested size is a choice, not a setting already applied (Codex R1-4) (3.4s)
+  ✓  16 [desktop] › e2e/rollcue.spec.ts:201:1 › approval waits until the production preview has loaded (Codex R4-5) (1.7s)
   ✓  17 [desktop] › e2e/rollcue.spec.ts:221:1 › a stale approval follows the replacement decision without a reload (Codex R4-8) (4.4s)
   ✓  18 [desktop] › e2e/rollcue.spec.ts:241:1 › another tab’s correction reaches an idle tab without a reload (Codex R5-7) (6.2s)
   ✓  19 [desktop] › e2e/rollcue.spec.ts:257:1 › media can be corrected on the decision card (Codex R5-5) (1.2s)
-  ✓  20 [desktop] › e2e/rollcue.spec.ts:269:1 › no horizontal overflow at this viewport (996ms)
-  ✓  21 [desktop] › e2e/rollcue.spec.ts:276:1 › legacy shows the return notice before it can be approved (Codex R7-8) (1.4s)
-  ✓  22 [mobile] › e2e/rollcue.spec.ts:12:1 › first visit: a prepared job and its next decision, no setup (1.2s)
+  ✓  20 [desktop] › e2e/rollcue.spec.ts:269:1 › no horizontal overflow at this viewport (1.1s)
+  ✓  21 [desktop] › e2e/rollcue.spec.ts:276:1 › legacy shows the return notice before it can be approved (Codex R7-8) (1.5s)
+  ✓  22 [mobile] › e2e/rollcue.spec.ts:12:1 › first visit: a prepared job and its next decision, no setup (2.3s)
   ✓  23 [mobile] › e2e/rollcue.spec.ts:27:1 › switching jobs never leaves the previous job actionable (1.3s)
-  ✓  24 [mobile] › e2e/rollcue.spec.ts:42:1 › server unreachable: says so, changes nothing, and retries (1.0s)
-  ✓  25 [mobile] › e2e/rollcue.spec.ts:51:1 › approve: bound to the artifact, then a verified receipt and a valid PDF (1.8s)
-  ✓  26 [mobile] › e2e/rollcue.spec.ts:68:1 › wrong guess: flagged, corrected in one step, remembered, re-prepared (3.6s)
-  ✓  27 [mobile] › e2e/rollcue.spec.ts:95:1 › return path: soft artwork gets a prepared notice instead of a blurry print (1.2s)
-  ✓  28 [mobile] › e2e/rollcue.spec.ts:105:1 › execution failure: nothing released, retry recovers (1.4s)
-  ✓  29 [mobile] › e2e/rollcue.spec.ts:120:1 › upload: a real file through intake, reading and decision (2.2s)
+  ✓  24 [mobile] › e2e/rollcue.spec.ts:42:1 › server unreachable: says so, changes nothing, and retries (1.1s)
+  ✓  25 [mobile] › e2e/rollcue.spec.ts:51:1 › approve: bound to the artifact, then a verified receipt and a valid PDF (6.2s)
+  ✓  26 [mobile] › e2e/rollcue.spec.ts:68:1 › wrong guess: flagged, corrected in one step, remembered, re-prepared (4.3s)
+  ✓  27 [mobile] › e2e/rollcue.spec.ts:95:1 › return path: soft artwork gets a prepared notice instead of a blurry print (1.5s)
+  ✓  28 [mobile] › e2e/rollcue.spec.ts:105:1 › execution failure: nothing released, retry recovers (5.9s)
+  ✓  29 [mobile] › e2e/rollcue.spec.ts:120:1 › upload: a real file through intake, reading and decision (2.3s)
   ✓  30 [mobile] › e2e/rollcue.spec.ts:134:1 › unsupported upload is refused with a clear message (1.4s)
-  ✓  31 [mobile] › e2e/rollcue.spec.ts:143:1 › keyboard: compare slider and dialog work without a pointer (1.2s)
-  ✓  32 [mobile] › e2e/rollcue.spec.ts:158:1 › refresh keeps the work: state is on the server, not in the tab (2.3s)
+  ✓  31 [mobile] › e2e/rollcue.spec.ts:143:1 › keyboard: compare slider and dialog work without a pointer (3.2s)
+  ✓  32 [mobile] › e2e/rollcue.spec.ts:158:1 › refresh keeps the work: state is on the server, not in the tab (2.4s)
   ✓  33 [mobile] › e2e/rollcue.spec.ts:172:1 › legacy will not output until ticket, preflight and cut are done (1.1s)
-  ✓  34 [mobile] › e2e/rollcue.spec.ts:180:1 › a suggested size is a choice, not a setting already applied (Codex R1-4) (2.6s)
-  ✓  35 [mobile] › e2e/rollcue.spec.ts:201:1 › approval waits until the production preview has loaded (Codex R4-5) (1.3s)
-  ✓  36 [mobile] › e2e/rollcue.spec.ts:221:1 › a stale approval follows the replacement decision without a reload (Codex R4-8) (4.2s)
-  ✓  37 [mobile] › e2e/rollcue.spec.ts:241:1 › another tab’s correction reaches an idle tab without a reload (Codex R5-7) (6.2s)
-  ✓  38 [mobile] › e2e/rollcue.spec.ts:257:1 › media can be corrected on the decision card (Codex R5-5) (1.2s)
-  ✓  39 [mobile] › e2e/rollcue.spec.ts:269:1 › no horizontal overflow at this viewport (1.0s)
-  ✓  40 [mobile] › e2e/rollcue.spec.ts:276:1 › legacy shows the return notice before it can be approved (Codex R7-8) (1.5s)
+  ✓  34 [mobile] › e2e/rollcue.spec.ts:180:1 › a suggested size is a choice, not a setting already applied (Codex R1-4) (2.9s)
+  ✓  35 [mobile] › e2e/rollcue.spec.ts:201:1 › approval waits until the production preview has loaded (Codex R4-5) (1.6s)
+  ✓  36 [mobile] › e2e/rollcue.spec.ts:221:1 › a stale approval follows the replacement decision without a reload (Codex R4-8) (5.0s)
+  ✓  37 [mobile] › e2e/rollcue.spec.ts:241:1 › another tab’s correction reaches an idle tab without a reload (Codex R5-7) (6.8s)
+  ✓  38 [mobile] › e2e/rollcue.spec.ts:257:1 › media can be corrected on the decision card (Codex R5-5) (3.2s)
+  ✓  39 [mobile] › e2e/rollcue.spec.ts:269:1 › no horizontal overflow at this viewport (1.3s)
+  ✓  40 [mobile] › e2e/rollcue.spec.ts:276:1 › legacy shows the return notice before it can be approved (Codex R7-8) (3.8s)
 
-  40 passed (1.7m)
+  40 passed (2.4m)
 
-=== audit (16:41:24)
+=== audit (19:24:41)
 found 0 vulnerabilities
 
-=== docker build + smoke: SKIPPED (no docker in this environment) (16:41:25)
+=== docker build + smoke: SKIPPED (no docker in this environment) (19:24:42)
 
-=== CI PASSED (16:41:25)
+=== CI PASSED (19:24:42)
 
 === host stage: docker build + smoke
 #0 building with "desktop-linux" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
+#1 DONE 0.0s
+
+#1 [internal] load build definition from Dockerfile
 #1 transferring dockerfile:
 #1 transferring dockerfile: 976B 0.0s done
-#1 DONE 0.7s
+#1 DONE 9.0s
 
 #2 resolve image config for docker-image://docker.io/docker/dockerfile:1
-#2 DONE 1.6s
+#2 DONE 5.3s
 
 #3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 #3 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
-#3 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e 0.8s done
+#3 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e 3.8s done
 #3 CACHED
 
 #4 [internal] load metadata for docker.io/library/node:24.13.0-slim@sha256:4660b1ca8b28d6d1906fd644abe34b2ed81d15434d26d845ef0aced307cf4b6f
-#4 DONE 1.5s
+#4 DONE 3.3s
 
 #5 [internal] load .dockerignore
 #5 transferring context:
-#5 transferring context: 157B 0.0s done
-#5 DONE 0.7s
+#5 transferring context: 157B done
+#5 DONE 1.3s
 
 #6 [internal] load build context
 #6 DONE 0.0s
 
 #7 [build 1/8] FROM docker.io/library/node:24.13.0-slim@sha256:4660b1ca8b28d6d1906fd644abe34b2ed81d15434d26d845ef0aced307cf4b6f
 #7 resolve docker.io/library/node:24.13.0-slim@sha256:4660b1ca8b28d6d1906fd644abe34b2ed81d15434d26d845ef0aced307cf4b6f
-#7 resolve docker.io/library/node:24.13.0-slim@sha256:4660b1ca8b28d6d1906fd644abe34b2ed81d15434d26d845ef0aced307cf4b6f 0.6s done
-#7 DONE 0.7s
+#7 resolve docker.io/library/node:24.13.0-slim@sha256:4660b1ca8b28d6d1906fd644abe34b2ed81d15434d26d845ef0aced307cf4b6f 6.1s done
+#7 DONE 6.8s
 
 #6 [internal] load build context
-#6 transferring context: 72.18kB 0.1s done
-#6 DONE 0.5s
+#6 transferring context:
+#6 transferring context: 102.34kB 0.0s done
+#6 DONE 2.0s
 
-#8 [build 4/8] RUN npm ci --ignore-scripts && npm rebuild @napi-rs/canvas
+#8 [build 2/8] WORKDIR /app
 #8 CACHED
 
-#9 [build 2/8] WORKDIR /app
+#9 [build 3/8] COPY package.json package-lock.json ./
 #9 CACHED
 
-#10 [build 3/8] COPY package.json package-lock.json ./
+#10 [build 4/8] RUN npm ci --ignore-scripts && npm rebuild @napi-rs/canvas
 #10 CACHED
 
 #11 [build 5/8] COPY tsconfig.json vite.config.ts ./
 #11 CACHED
 
 #12 [build 6/8] COPY ui ui
-#12 DONE 1.6s
+#12 CACHED
 
 #13 [build 7/8] COPY src src
-#13 DONE 2.3s
+#13 DONE 3.3s
 
 #14 [build 8/8] RUN npx vite build
-#14 5.022 vite v8.3.4 building client environment for production...
-#14 5.038 transforming...
-#14 5.296 ✓ 23 modules transformed.
-#14 5.409 rendering chunks...
-#14 5.455 computing gzip size...
-#14 5.464 public/legacy.html                                                      0.60 kB │ gzip:  0.35 kB
-#14 5.464 public/index.html                                                       0.76 kB │ gzip:  0.41 kB
-#14 5.464 public/assets/jetbrains-mono-cyrillic-ext-wght-normal-EocZY2iu.woff2    2.02 kB
-#14 5.464 public/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2      7.50 kB
-#14 5.464 public/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2           9.00 kB
-#14 5.464 public/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2              10.25 kB
-#14 5.464 public/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2               11.23 kB
-#14 5.464 public/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2       12.10 kB
-#14 5.464 public/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2      15.19 kB
-#14 5.464 public/assets/instrument-serif-latin-400-normal-BVbkICAY.woff          18.33 kB
-#14 5.464 public/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2                18.74 kB
-#14 5.464 public/assets/inter-greek-wght-normal-CkhJZR-_.woff2                   18.99 kB
-#14 5.464 public/assets/instrument-serif-latin-400-normal-DnYpCC2O.woff2         21.03 kB
-#14 5.464 public/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2            25.96 kB
-#14 5.464 public/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2          40.40 kB
-#14 5.464 public/assets/inter-latin-wght-normal-Dx4kXJAl.woff2                   48.25 kB
-#14 5.464 public/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2               85.06 kB
-#14 5.464 public/assets/legacy-DaQ1BpMe.css                                       2.34 kB │ gzip:  0.95 kB
-#14 5.464 public/assets/fonts-CskbnZTx.css                                        4.04 kB │ gzip:  0.77 kB
-#14 5.464 public/assets/index-BLLS3Y74.css                                       18.16 kB │ gzip:  5.00 kB
-#14 5.464 public/assets/legacy-CgBJMlBe.js                                        9.60 kB │ gzip:  3.08 kB
-#14 5.464 public/assets/index-D5Ugzn_C.js                                        30.88 kB │ gzip:  9.17 kB
-#14 5.464 public/assets/fonts-DSY_f_PS.js                                       223.43 kB │ gzip: 70.16 kB
-#14 5.464 
-#14 5.465 ✓ built in 441ms
-#14 DONE 6.7s
+#14 17.38 vite v8.3.4 building client environment for production...
+#14 17.40 transforming...
+#14 17.58 ✓ 23 modules transformed.
+#14 17.85 rendering chunks...
+#14 17.90 computing gzip size...
+#14 17.90 public/legacy.html                                                      0.60 kB │ gzip:  0.35 kB
+#14 17.90 public/index.html                                                       0.76 kB │ gzip:  0.41 kB
+#14 17.90 public/assets/jetbrains-mono-cyrillic-ext-wght-normal-EocZY2iu.woff2    2.02 kB
+#14 17.90 public/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2      7.50 kB
+#14 17.90 public/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2           9.00 kB
+#14 17.90 public/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2              10.25 kB
+#14 17.90 public/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2               11.23 kB
+#14 17.90 public/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2       12.10 kB
+#14 17.90 public/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2      15.19 kB
+#14 17.90 public/assets/instrument-serif-latin-400-normal-BVbkICAY.woff          18.33 kB
+#14 17.90 public/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2                18.74 kB
+#14 17.90 public/assets/inter-greek-wght-normal-CkhJZR-_.woff2                   18.99 kB
+#14 17.90 public/assets/instrument-serif-latin-400-normal-DnYpCC2O.woff2         21.03 kB
+#14 17.90 public/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2            25.96 kB
+#14 17.90 public/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2          40.40 kB
+#14 17.90 public/assets/inter-latin-wght-normal-Dx4kXJAl.woff2                   48.25 kB
+#14 17.90 public/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2               85.06 kB
+#14 17.90 public/assets/legacy-DaQ1BpMe.css                                       2.34 kB │ gzip:  0.95 kB
+#14 17.90 public/assets/fonts-CskbnZTx.css                                        4.04 kB │ gzip:  0.77 kB
+#14 17.90 public/assets/index-BLLS3Y74.css                                       18.16 kB │ gzip:  5.00 kB
+#14 17.90 public/assets/legacy-CgBJMlBe.js                                        9.60 kB │ gzip:  3.08 kB
+#14 17.90 public/assets/index-D5Ugzn_C.js                                        30.88 kB │ gzip:  9.17 kB
+#14 17.90 public/assets/fonts-DSY_f_PS.js                                       223.43 kB │ gzip: 70.16 kB
+#14 17.90 
+#14 17.90 ✓ built in 519ms
+#14 DONE 21.1s
 
 #15 [stage-1 4/8] RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 #15 CACHED
 
 #16 [stage-1 5/8] COPY --from=build /app/public public
-#16 DONE 1.8s
+#16 CACHED
 
 #17 [stage-1 6/8] COPY src src
-#17 DONE 2.7s
+#17 DONE 3.8s
 
 #18 [stage-1 7/8] COPY samples samples
-#18 DONE 2.7s
+#18 DONE 7.7s
 
 #19 [stage-1 8/8] RUN mkdir -p data && chown node:node data
-#19 DONE 3.6s
+#19 DONE 9.3s
 
 #20 exporting to image
 #20 exporting layers
-#20 exporting layers 9.5s done
-#20 exporting manifest sha256:dd97b69ff7c0b43b62a36ad07856a0518d58be9062655c35c279d4ea1f391101
-#20 exporting manifest sha256:dd97b69ff7c0b43b62a36ad07856a0518d58be9062655c35c279d4ea1f391101 0.6s done
-#20 exporting config sha256:07c96dd8e26f3af061c42cab6cfe7a2fe2954135fdb3583782893e2036359a46
-#20 exporting config sha256:07c96dd8e26f3af061c42cab6cfe7a2fe2954135fdb3583782893e2036359a46 0.6s done
-#20 exporting attestation manifest sha256:fead3a12dc1bfdcf48f8f29e13613a47ff3815fb5e3acf8d417c3209855972ad
-#20 exporting attestation manifest sha256:fead3a12dc1bfdcf48f8f29e13613a47ff3815fb5e3acf8d417c3209855972ad 0.6s done
-#20 exporting manifest list sha256:e0b5742b9a967ca9450d787f15948a0484a309dc8a652bab272683b96b3a2ace
-#20 exporting manifest list sha256:e0b5742b9a967ca9450d787f15948a0484a309dc8a652bab272683b96b3a2ace 0.6s done
+#20 exporting layers 24.3s done
+#20 exporting manifest sha256:165b71f1d424473d9d4887d1ab1f39b17ca9800eafb696de660298262aebe2c5
+#20 exporting manifest sha256:165b71f1d424473d9d4887d1ab1f39b17ca9800eafb696de660298262aebe2c5 9.3s done
+#20 exporting config sha256:1833b6be1000ae581e2e3151e68bd5492ddb3d0164da3d860188a98286abebd0
+#20 exporting config sha256:1833b6be1000ae581e2e3151e68bd5492ddb3d0164da3d860188a98286abebd0 2.4s done
+#20 exporting attestation manifest sha256:b249576197a5c2b48d619266187f90b9fce2414a0064cb9f5893e8f414841749
+#20 exporting attestation manifest sha256:b249576197a5c2b48d619266187f90b9fce2414a0064cb9f5893e8f414841749 2.1s done
+#20 exporting manifest list sha256:026a71e6461fcfaee44da0047f9cd2a08614cb15f65c6a361d33bfd1617487ec
+#20 exporting manifest list sha256:026a71e6461fcfaee44da0047f9cd2a08614cb15f65c6a361d33bfd1617487ec 1.7s done
 #20 naming to docker.io/library/rollcue:ci
-#20 naming to docker.io/library/rollcue:ci 0.1s done
+#20 naming to docker.io/library/rollcue:ci 0.2s done
 #20 unpacking to docker.io/library/rollcue:ci
-#20 unpacking to docker.io/library/rollcue:ci 2.4s done
-#20 DONE 15.0s
+#20 unpacking to docker.io/library/rollcue:ci 5.7s done
+#20 DONE 47.8s
 
-View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/2kxx1uvkdx9dcjgpijhhh78i0
-{"ok":true}ready jobs: 4
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/b65022iaeoogjg0s18fx9ghvd
+{"ok":true}prepared and verified: 4 (olive-market-sticker.pdf:prepared, stickers-final.pdf:prepared, honey-jar-labels.pdf:prepared, window-poster.jpg:prepared)
 docker smoke ok
 [rollcue] listening on :3000 (db pglite; recovered {"analysing":0,"preparing":0})
 
 === ALL STAGES PASSED
+exit 0

@@ -54,6 +54,7 @@ if (mode === 'checks') {
   const op = client();
   const s = await op.get('/api/session');
   check(s.status === 200 && s.body.jobs.length >= 4, 'first visit seeds sample jobs', `${s.body.jobs?.length} jobs`);
+  if (s.status !== 200) { console.log(`stopping: session start answered ${s.status} ${s.body.error ?? ''} (a 429 means this address's session budget is spent; wait a few minutes)`); process.exit(1); }
   const sticker = await prepared(op, 'market-stickers');
   check(sticker.events.some((e: any) => e.type === 'proposal-prepared') && !sticker.events.some((e: any) => e.type === 'approved'), 'proactive: prepared before the operator acted');
   check(sticker.prediction?.top === 'sticker' && sticker.plan.intentSource === 'model', 'inference: market-stickers read as stickers by the model', `${sticker.prediction?.top} p=${sticker.prediction?.probs?.sticker?.toFixed?.(2) ?? '?'}`);
