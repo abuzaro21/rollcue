@@ -77,6 +77,6 @@ PLAN ✔ → NAME ✔ → DESIGN ✔ → IMPLEMENT ✔ → TEST ✔ (local, clea
 
 | Action | Why |
 |---|---|
-| Watch and listen to the film; upload it to YouTube as Unlisted (text in [SUBMISSION.md](SUBMISSION.md)) | Owner's account; no person has reviewed the film yet |
+| Watch and listen to the film | Uploaded by the owner to YouTube on 2026-11-15 (<https://youtu.be/EKGT1vQ0tRo>); whether it was watched in full is not recorded here |
 | Replace the free database between 2026-12-09 and 2026-12-14 16:52 UTC ([DEPLOY.md](DEPLOY.md#database-continuity)) | Deleting the old database is irreversible and needs the owner's confirmation |
 | Submit the DOO form | Owner's account; only the form's confirmation completes the submission |

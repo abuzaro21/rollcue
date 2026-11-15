@@ -20,7 +20,7 @@ DOO Builders League, challenge **"Beyond the Chatbot"**: what replaces the dashb
 | Repository | <https://github.com/abuzaro21/rollcue> (public, MIT) |
 | Live demo | <https://rollcue-a7jn.onrender.com>. Free hosting: the first visit after an idle spell takes up to a minute. The database terms are under Limitations. |
 | Release | <https://github.com/abuzaro21/rollcue/releases/tag/v1.0.0> |
-| Film | The YouTube (Unlisted) link, from the owner. The same file is attached to the release as [`rollcue-film.mp4`](https://github.com/abuzaro21/rollcue/releases/download/v1.0.0/rollcue-film.mp4), with captions in [`rollcue-film.srt`](https://github.com/abuzaro21/rollcue/releases/download/v1.0.0/rollcue-film.srt). |
+| Film | <https://youtu.be/EKGT1vQ0tRo> (YouTube, uploaded by the owner on 2026-11-15). The same film is attached to the release as [`rollcue-film.mp4`](https://github.com/abuzaro21/rollcue/releases/download/v1.0.0/rollcue-film.mp4), with captions in [`rollcue-film.srt`](https://github.com/abuzaro21/rollcue/releases/download/v1.0.0/rollcue-film.srt). |
 | Thesis | [THESIS.md](THESIS.md) (295 words) |
 | Architecture | [ARCHITECTURE.md](ARCHITECTURE.md); snapshot below |
 | Failure test | [FAILURE-TEST.md](FAILURE-TEST.md) |
@@ -67,7 +67,7 @@ operator ─► approve (bound to the artifact's SHA-256 and versions) ─► re
 - **Film narration** is a synthetic voice, Kokoro-82M. Caption timing and the transcript check used Whisper, run locally.
 - **All sample files are synthetic.** Nothing was printed.
 
-## YouTube (owner uploads, visibility Unlisted)
+## YouTube (uploaded: https://youtu.be/EKGT1vQ0tRo)
 
 **Title** (91 characters; YouTube allows 100):
 
@@ -127,7 +127,7 @@ RollCue, print intake, prepress, preflight, CutContour, die-cut stickers, roll l
 | Release v1.0.0 with film MP4 and SRT attached | done |
 | Codex reviews | R0–R8 done (nine reviews, plus the R7b re-check). The changes after R8 are listed below |
 | Free database replaced for judging | **open, dated:** between 2026-12-09 and 2026-12-14 16:52 UTC ([DEPLOY.md](DEPLOY.md#database-continuity)) |
-| Owner uploads film to YouTube (Unlisted) | owner |
+| Owner uploads film to YouTube (Unlisted) | done by the owner: <https://youtu.be/EKGT1vQ0tRo>. The oEmbed lookup on 2026-11-15 resolved it with the title above |
 | Owner submits the DOO form and sees the confirmation | owner |
 
 ## Changes after Codex's final review

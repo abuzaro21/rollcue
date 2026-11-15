@@ -11,7 +11,7 @@ Nothing happens until the operator approves. The approval is bound to the exact 
 Built for the DOO Builders League challenge "Beyond the Chatbot".
 
 - **Live demo:** <https://rollcue-a7jn.onrender.com> (free hosting: the first visit after an idle spell can take up to a minute to wake; verification in [docs/DEPLOY.md](docs/DEPLOY.md))
-- **Film (90 s):** [rollcue-film.mp4](https://github.com/abuzaro21/rollcue/releases/download/v1.0.0/rollcue-film.mp4) with [English captions](https://github.com/abuzaro21/rollcue/releases/download/v1.0.0/rollcue-film.srt), attached to [release v1.0.0](https://github.com/abuzaro21/rollcue/releases/tag/v1.0.0). Every product shot is a recording of the real app; how it was made and checked: [docs/FILM.md](docs/FILM.md)
+- **Film (90 s):** [watch on YouTube](https://youtu.be/EKGT1vQ0tRo), or download [rollcue-film.mp4](https://github.com/abuzaro21/rollcue/releases/download/v1.0.0/rollcue-film.mp4) with [English captions](https://github.com/abuzaro21/rollcue/releases/download/v1.0.0/rollcue-film.srt), attached to [release v1.0.0](https://github.com/abuzaro21/rollcue/releases/tag/v1.0.0). Every product shot is a recording of the real app; how it was made and checked: [docs/FILM.md](docs/FILM.md)
 - **Thesis (≤300 words):** [docs/THESIS.md](docs/THESIS.md)
 
 ## Try it in 30 seconds
